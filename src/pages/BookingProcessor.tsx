@@ -11,6 +11,7 @@ import {
   WelcomePackSize,
 } from '../lib/properties';
 import ReconciliationTab from './ReconciliationTab';
+import LiveReconciliationTab from './LiveReconciliationTab';
 import {
   BookingRecord, norm, cleanNum, parseDMY as parseDate, fmt,
   findHeader, resolve, escCsv, toCsv, dlBlob, dlCsv, MONTH_NAMES as MONTHS,
@@ -145,7 +146,7 @@ function BookingProcessor() {
   const [fname, setFname] = useState('');
   const [showConfig, setShowConfig] = useState(false);
   const [configTab, setConfigTab] = useState('cleans');
-  const [view, setView] = useState<'processor' | 'recon'>('processor');
+  const [view, setView] = useState<'processor' | 'recon' | 'live'>('processor');
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Config state
@@ -628,16 +629,29 @@ function BookingProcessor() {
           <button
             style={view === 'recon' ? { ...sBtn, background: C.navy, color: '#fff' } : sBtnGhost}
             onClick={() => setView('recon')}>
-            Reconciliation
+            Manual Reconciliation
+          </button>
+          <button
+            style={view === 'live' ? { ...sBtn, background: C.navy, color: '#fff' } : sBtnGhost}
+            onClick={() => setView('live')}>
+            Live Reconciliation
           </button>
           <div style={{ marginLeft: 'auto' }}>
             <button style={sBtnGhost} onClick={() => setShowConfig(true)}>&#9881; Config</button>
           </div>
         </div>
-        {view === 'recon' ? (
+        {view === 'live' ? (
           <div>
             <div style={{ marginBottom: 24 }}>
-              <h1 style={{ fontSize: 22, fontWeight: 800, color: C.navyDeep, letterSpacing: '-0.5px', marginBottom: 4 }}>Reconciliation</h1>
+              <h1 style={{ fontSize: 22, fontWeight: 800, color: C.navyDeep, letterSpacing: '-0.5px', marginBottom: 4 }}>Live Reconciliation</h1>
+              <p style={{ color: C.muted, fontSize: 13 }}>Fed automatically by n8n — Booking.com report emails, Airbnb payout emails, Monzo sheet</p>
+            </div>
+            <LiveReconciliationTab bookings={all} />
+          </div>
+        ) : view === 'recon' ? (
+          <div>
+            <div style={{ marginBottom: 24 }}>
+              <h1 style={{ fontSize: 22, fontWeight: 800, color: C.navyDeep, letterSpacing: '-0.5px', marginBottom: 4 }}>Manual Reconciliation</h1>
               <p style={{ color: C.muted, fontSize: 13 }}>Match Airbnb and Booking.com payouts against expected values and the Monzo statement</p>
             </div>
             <ReconciliationTab bookings={all} />
