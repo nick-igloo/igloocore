@@ -1,0 +1,1 @@
+GRANT INSERT ON public.property_safety_checks TO anon;
