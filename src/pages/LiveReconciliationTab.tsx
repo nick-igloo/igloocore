@@ -7,8 +7,8 @@ import {
 
 // ═══════════════════════════════════════════════════════════════════
 // src/pages/LiveReconciliationTab.tsx — LIVE reconciliation
-// Shows what's happening now. No manual uploads needed once n8n is
-// running. Setup actions hidden in a collapsible drawer.
+// Monitoring dashboard: what's happening now, what's due, what's broken.
+// No manual uploads needed once n8n is running.
 // ═══════════════════════════════════════════════════════════════════
 
 const C = {
@@ -28,23 +28,6 @@ const sBtn = (active = false): CSSProperties => ({
   cursor: 'pointer', fontWeight: 600, fontSize: 12,
   fontFamily: "'Outfit', sans-serif", display: 'inline-flex', alignItems: 'center', gap: 6,
 });
-const sBadge = (bg: string, fg: string): CSSProperties => ({
-  display: 'inline-block', padding: '3px 8px', borderRadius: 6,
-  fontSize: 10, fontWeight: 700, background: bg, color: fg, whiteSpace: 'nowrap',
-});
-
-const LABEL_STYLE: Record<string, { bg: string; fg: string }> = {
-  'Paid':                { bg: '#d8f0e5', fg: '#1a6e42' },
-  'Resolution':          { bg: C.surface2, fg: C.muted },
-  'In transit':          { bg: C.bluePale, fg: C.navy },
-  'Due':                 { bg: C.bluePale, fg: C.navy },
-  'Upcoming':            { bg: C.surface2, fg: C.muted },
-  'Overdue':             { bg: '#fde0d8', fg: '#9a2a1a' },
-  'Short-paid':          { bg: '#fde0d8', fg: '#9a2a1a' },
-  'Overpaid':            { bg: '#fdefd5', fg: '#7a4e10' },
-  'Unknown':             { bg: '#fdefd5', fg: '#7a4e10' },
-  'Breakdown pending':   { bg: C.bluePale, fg: C.navy },
-};
 
 type Window = '7d' | '30d' | '90d';
 const WINDOWS: { key: Window; label: string; days: number }[] = [
@@ -153,7 +136,7 @@ export default function LiveReconciliationTab({ bookings }: Props) {
     })();
   }, [refreshKey]);
 
-  // filter everything to the selected time window
+  // filter to selected time window
   const windowDays = WINDOWS.find(w => w.key === window)?.days || 7;
   const cutoff = useMemo(() => {
     const d = new Date();
@@ -187,15 +170,30 @@ export default function LiveReconciliationTab({ bookings }: Props) {
     );
   }, [avantio, filteredAirbnb, filteredBcom, filteredBank]);
 
-  // summary stats
+  // separate issues from ok transactions
+  const allRows = useMemo(() => {
+    if (!engine) return { issues: [], received: [], due: [] };
+    const rows = engine.rows.filter(r => r.bucket !== 'hidden');
+    return {
+      issues: rows.filter(r => r.bucket === 'issue').sort((a, b) => {
+        const p = (l: string) => l === 'Short-paid' ? 0 : l === 'Overdue' ? 1 : l === 'Overpaid' ? 2 : 3;
+        return p(a.label) - p(b.label);
+      }),
+      received: rows.filter(r => r.bucket === 'paid').sort((a, b) => (b.sortDate?.getTime() || 0) - (a.sortDate?.getTime() || 0)),
+      due: rows.filter(r => r.bucket === 'onway').sort((a, b) => (a.sortDate?.getTime() || 0) - (b.sortDate?.getTime() || 0)),
+    };
+  }, [engine]);
+
   const stats = useMemo(() => {
     if (!engine) return null;
-    const rows = engine.rows.filter(r => r.bucket !== 'hidden');
-    const issues = rows.filter(r => r.bucket === 'issue');
-    const received = rows.filter(r => r.bucket === 'paid').reduce((s, r) => s + (r.channelPaid || 0), 0);
-    const onway = rows.filter(r => r.bucket === 'onway').reduce((s, r) => s + (r.channelPaid ?? r.expected ?? 0), 0);
-    return { issues: issues.length, received: r2(received), onway: r2(onway) };
-  }, [engine]);
+    const received = allRows.received.reduce((s, r) => s + (r.channelPaid || 0), 0);
+    const due = allRows.due.reduce((s, r) => s + (r.channelPaid ?? r.expected ?? 0), 0);
+    return {
+      issues: allRows.issues.length,
+      received: r2(received),
+      due: r2(due),
+    };
+  }, [engine, allRows]);
 
   // setup actions
   const syncAvantio = useCallback(async () => {
@@ -251,16 +249,16 @@ export default function LiveReconciliationTab({ bookings }: Props) {
   }, []);
 
   const rowLine = (r: any, i: number) => {
-    const st = LABEL_STYLE[r.label] || LABEL_STYLE['Paid'];
+    const st = r.bucket === 'issue' ? { bg: '#fde0d8', fg: '#9a2a1a' } : { bg: '#d8f0e5', fg: '#1a6e42' };
     const amount = r.label === 'Short-paid' && r.diff != null ? r.diff : (r.channelPaid ?? r.expected ?? null);
     return (
       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 20px', borderBottom: `1px solid ${C.surface2}`, fontSize: 13 }}>
-        <span style={{ ...sBadge(st.bg, st.fg), width: 80, textAlign: 'center' }}>{r.label}</span>
+        <span style={{ ...st, display: 'inline-block', padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, width: 80, textAlign: 'center' }}>{r.label}</span>
         <span style={{ fontWeight: 600, color: C.navyDeep, width: 190, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.property}>{r.property}</span>
         <span style={{ fontFamily: 'monospace', fontSize: 11, color: C.dim, width: 110 }}>{r.code}</span>
         <span style={{ color: C.muted, fontSize: 12, width: 78 }}>{r.checkout || r.payoutDate}</span>
         <span style={{ color: C.dim, fontSize: 11.5, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.note}</span>
-        <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: r.label === 'Short-paid' ? C.coral : C.navyDeep, minWidth: 84, textAlign: 'right' }}>
+        <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: r.bucket === 'issue' ? C.coral : C.green, minWidth: 84, textAlign: 'right' }}>
           {amount != null ? fmt(amount) : ''}
         </span>
       </div>
@@ -282,47 +280,35 @@ export default function LiveReconciliationTab({ bookings }: Props) {
     <div>
       {/* ── HEADER BAR ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
-        {/* Window buttons */}
         {WINDOWS.map(w => (
           <button key={w.key} style={sBtn(window === w.key)} onClick={() => setWindow(w.key)}>{w.label}</button>
         ))}
-
-        {/* Spacer */}
         <div style={{ flex: 1 }} />
-
-        {/* Last refresh */}
         {lastRefresh && (
           <span style={{ fontSize: 11.5, color: C.dim }}>
-            Updated {lastRefresh.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+            {lastRefresh.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
           </span>
         )}
-
-        {/* Refresh */}
         <button style={sBtn()} onClick={() => setRefreshKey(k => k + 1)}>↻ Refresh</button>
-
-        {/* Setup drawer toggle */}
         <button style={{ ...sBtn(), color: C.dim }} onClick={() => setShowSetup(s => !s)}>
-          ⚙ Setup {showSetup ? '▴' : '▾'}
+          ⚙ {showSetup ? '▴' : '▾'}
         </button>
       </div>
 
       {/* ── SETUP DRAWER ── */}
       {showSetup && (
         <div style={{ ...sCard, padding: '16px 20px', marginBottom: 20, background: C.surface2, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>One-time setup / backfill</span>
+          <span style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>Setup / backfill</span>
           <div style={{ width: 1, height: 20, background: C.border }} />
           <button style={sBtn()} onClick={syncAvantio} disabled={busy}>
-            Sync Avantio data {bookings.length ? `(${bookings.length} bookings loaded)` : '— load CSV on Processor tab first'}
+            Sync Avantio {bookings.length ? `(${bookings.length} loaded)` : ''}
           </button>
           <button style={sBtn()} onClick={() => abRef.current?.click()} disabled={busy}>
-            Import monthly Airbnb CSV
+            Import Airbnb CSV
           </button>
           <input ref={abRef} type="file" accept=".csv" style={{ display: 'none' }}
             onChange={e => { if (e.target.files?.[0]) importAirbnbCsv(e.target.files[0]); e.target.value = ''; }} />
           {setupMsg && <span style={{ fontSize: 12, color: C.muted }}>{setupMsg}</span>}
-          <div style={{ marginLeft: 'auto', fontSize: 11, color: C.dim }}>
-            {counts.avantio} expected · {counts.payouts} Airbnb payouts · {counts.bcom} B.com · {counts.bank} bank txs
-          </div>
         </div>
       )}
 
@@ -331,18 +317,28 @@ export default function LiveReconciliationTab({ bookings }: Props) {
         <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
           <div style={{ ...sCard, flex: 1, padding: '16px 20px' }}>
             <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Received</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: '#1a6e42' }}>{fmt0(stats.received)}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: C.green }}>{fmt0(stats.received)}</div>
           </div>
           <div style={{ ...sCard, flex: 1, padding: '16px 20px' }}>
-            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>On its way</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: C.navy }}>{fmt0(stats.onway)}</div>
+            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Due</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: C.navy }}>{fmt0(stats.due)}</div>
           </div>
           <div style={{ ...sCard, flex: 1, padding: '16px 20px' }}>
             <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Issues</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: stats.issues > 0 ? C.coral : '#1a6e42' }}>
-              {stats.issues > 0 ? stats.issues : '✓ None'}
+            <div style={{ fontSize: 24, fontWeight: 800, color: stats.issues > 0 ? C.coral : C.green }}>
+              {stats.issues > 0 ? stats.issues : '✓'}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── ISSUES BOX ── */}
+      {allRows.issues.length > 0 && (
+        <div style={{ ...sCard, marginBottom: 20, borderLeft: `4px solid ${C.coral}` }}>
+          <div style={{ padding: '12px 20px', background: '#fef5f4', borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: C.coral, fontSize: 13 }}>
+            ⚠ {allRows.issues.length} issue{allRows.issues.length !== 1 ? 's' : ''} need attention
+          </div>
+          {allRows.issues.map((r, i) => rowLine(r, i))}
         </div>
       )}
 
@@ -350,43 +346,29 @@ export default function LiveReconciliationTab({ bookings }: Props) {
       {!engine && (
         <div style={{ ...sCard, padding: '48px 24px', textAlign: 'center' }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: C.navyDeep, marginBottom: 4 }}>No activity in this window</div>
-          <div style={{ color: C.dim, fontSize: 12.5 }}>n8n feeds this automatically. Try widening the window, or check the n8n workflows are active.</div>
+          <div style={{ color: C.dim, fontSize: 12.5 }}>Try widening the window, or check the n8n workflows are running.</div>
         </div>
       )}
 
-      {/* ── CHANNEL CARDS ── */}
-      {engine && (['Airbnb', 'Booking.com'] as const).map(ch => {
-        const chRows = engine.rows.filter(r => r.channel === ch && r.bucket !== 'hidden');
-        const issues = chRows.filter(r => r.bucket === 'issue').sort((a, b) => {
-          const p = (l: string) => l === 'Short-paid' ? 0 : l === 'Overdue' ? 1 : 2;
-          return p(a.label) - p(b.label);
-        });
-        const onway = chRows.filter(r => r.bucket === 'onway').sort((a, b) => (a.sortDate?.getTime() || 0) - (b.sortDate?.getTime() || 0));
-        const paid = chRows.filter(r => r.bucket === 'paid').sort((a, b) => (b.sortDate?.getTime() || 0) - (a.sortDate?.getTime() || 0));
-        const received = r2(paid.reduce((s, r) => s + (r.channelPaid || 0), 0));
-        const onwayTotal = r2(onway.reduce((s, r) => s + (r.channelPaid ?? r.expected ?? 0), 0));
-        const shortTotal = r2(issues.filter(r => r.label === 'Short-paid').reduce((s, r) => s + (r.diff || 0), 0));
-        if (!chRows.length && !issues.length) return null;
-        return (
-          <div key={ch} style={{ ...sCard, marginBottom: 16 }}>
-            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, background: ch === 'Airbnb' ? '#fdf6f4' : '#f4f9fd', display: 'flex', alignItems: 'baseline', gap: 20, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 15, fontWeight: 800, color: C.navyDeep, minWidth: 120 }}>{ch}</span>
-              <span style={{ fontSize: 13, color: C.muted }}>Received <b style={{ color: '#1a6e42' }}>{fmt0(received)}</b></span>
-              {onwayTotal > 0 && <span style={{ fontSize: 13, color: C.muted }}>On its way <b style={{ color: C.navy }}>{fmt0(onwayTotal)}</b></span>}
-              {issues.length > 0
-                ? <span style={{ fontSize: 13, color: C.coral, fontWeight: 700 }}>⚠ {issues.length} issue{issues.length !== 1 ? 's' : ''}{shortTotal < 0 ? ` (${fmt(shortTotal)})` : ''}</span>
-                : <span style={{ fontSize: 13, color: '#1a6e42', fontWeight: 600 }}>✓ No issues</span>}
-            </div>
-            {issues.map((r, i) => rowLine(r, i))}
-            {onway.map((r, i) => rowLine(r, 1000 + i))}
-            {paid.length > 0 && (
-              <div style={{ padding: '8px 20px', color: C.dim, fontSize: 12 }}>
-                {paid.length} paid booking{paid.length !== 1 ? 's' : ''} — {fmt0(received)} received in this window
-              </div>
-            )}
+      {/* ── RECEIVED ── */}
+      {allRows.received.length > 0 && (
+        <div style={{ ...sCard, marginBottom: 20 }}>
+          <div style={{ padding: '12px 20px', background: '#f5fdf9', borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: C.green, fontSize: 13 }}>
+            ✓ Received — {fmt0(stats?.received || 0)} ({allRows.received.length} txs)
           </div>
-        );
-      })}
+          {allRows.received.map((r, i) => rowLine(r, i))}
+        </div>
+      )}
+
+      {/* ── DUE ── */}
+      {allRows.due.length > 0 && (
+        <div style={{ ...sCard }}>
+          <div style={{ padding: '12px 20px', background: C.bluePale, borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: C.navy, fontSize: 13 }}>
+            → Due — {fmt0(stats?.due || 0)} ({allRows.due.length} txs)
+          </div>
+          {allRows.due.map((r, i) => rowLine(r, 1000 + i))}
+        </div>
+      )}
     </div>
   );
 }
