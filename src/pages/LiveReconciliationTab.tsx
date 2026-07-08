@@ -70,7 +70,7 @@ export default function LiveReconciliationTab({ bookings }: Props) {
   const [showSetup, setShowSetup] = useState(false);
   const [setupMsg, setSetupMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ issues: false, received: false, due: false });
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ issues: false, received: false, transit: false, due: false });
   const abRef = useRef<HTMLInputElement>(null);
 
   const [avantio, setAvantio] = useState<AvantioBooking[]>([]);
@@ -181,7 +181,7 @@ export default function LiveReconciliationTab({ bookings }: Props) {
   // Issues always show regardless of window — an unresolved problem doesn't
   // stop needing attention because it aged out of the last 7 days.
   const allRows = useMemo(() => {
-    if (!engine) return { issues: [], received: [], due: [] };
+    if (!engine) return { issues: [], received: [], transit: [], due: [] };
     const rows = engine.rows.filter(r => r.bucket !== 'hidden');
     const inWindow = (r: ReconRow) => r.sortDate !== null && r.sortDate >= cutoff;
     return {
@@ -190,18 +190,21 @@ export default function LiveReconciliationTab({ bookings }: Props) {
         return p(a.label) - p(b.label);
       }),
       received: rows.filter(r => r.bucket === 'paid' && inWindow(r)).sort((a, b) => (b.sortDate?.getTime() || 0) - (a.sortDate?.getTime() || 0)),
-      due: rows.filter(r => r.bucket === 'onway' && inWindow(r)).sort((a, b) => (a.sortDate?.getTime() || 0) - (b.sortDate?.getTime() || 0)),
+      transit: rows.filter(r => r.bucket === 'onway' && r.payoutKey !== null && inWindow(r)).sort((a, b) => (b.sortDate?.getTime() || 0) - (a.sortDate?.getTime() || 0)),
+      due: rows.filter(r => r.bucket === 'onway' && r.payoutKey === null && inWindow(r)).sort((a, b) => (a.sortDate?.getTime() || 0) - (b.sortDate?.getTime() || 0)),
     };
   }, [engine, cutoff]);
 
   const stats = useMemo(() => {
     if (!engine) return null;
     const received = allRows.received.reduce((s, r) => s + (r.channelPaid || 0), 0);
+    const transit = allRows.transit.reduce((s, r) => s + (r.channelPaid ?? r.expected ?? 0), 0);
     const due = allRows.due.reduce((s, r) => s + (r.channelPaid ?? r.expected ?? 0), 0);
     return {
       issues: allRows.issues.length,
       received: r2(received),
-      due: r2(due),
+      transit: r2(transit),
+      due: r2(due + transit),
     };
   }, [engine, allRows]);
 
@@ -350,8 +353,10 @@ export default function LiveReconciliationTab({ bookings }: Props) {
             <span>{first.channel} payout {fmt(batchTotal)}</span>
             <span style={{ fontWeight: 500, color: C.muted }}>· {g.rows.length} booking{g.rows.length === 1 ? '' : 's'}</span>
             {first.payoutDate && <span style={{ fontWeight: 500, color: C.muted }}>· sent {first.payoutDate}</span>}
-            <span style={{ fontWeight: 600, color: first.bankDate ? C.green : C.coral }}>
-              · {first.bankDate ? `landed in bank ${first.bankDate} ✓` : 'not in bank'}
+            <span style={{ fontWeight: 600, color: first.bankDate ? C.green : g.rows.some(r => r.bucket === 'issue') ? C.coral : '#9a6a10' }}>
+              · {first.bankDate ? `landed in bank ${first.bankDate} ✓`
+                  : g.rows.some(r => r.bucket === 'issue') ? 'not in bank'
+                  : `awaiting bank${(() => { const a = /Arrives (\S+)/.exec(g.rows[0].note || ''); return a ? ` · arrives ${a[1]}` : ''; })()}`}
             </span>
           </div>
         );
@@ -469,12 +474,23 @@ export default function LiveReconciliationTab({ bookings }: Props) {
             </div>
           )}
 
+          {/* Sent — awaiting bank box */}
+          {allRows.transit.length > 0 && (
+            <div style={{ ...sCard }}>
+              <div style={{ padding: '12px 20px', background: '#fdf8ec', borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: '#9a6a10', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => setCollapsed(c => ({ ...c, transit: !c.transit }))}>
+                <span>{collapsed.transit ? '▾' : '▸'}</span>
+                <span>↗ Sent — awaiting bank — {fmt0(stats?.transit || 0)} ({allRows.transit.length} txs)</span>
+              </div>
+              {!collapsed.transit && groupedRows(allRows.transit, 'trn')}
+            </div>
+          )}
+
           {/* Due box */}
           {allRows.due.length > 0 && (
             <div style={{ ...sCard }}>
               <div style={{ padding: '12px 20px', background: C.bluePale, borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: C.navy, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => setCollapsed(c => ({ ...c, due: !c.due }))}>
                 <span>{collapsed.due ? '▾' : '▸'}</span>
-                <span>→ Due — {fmt0(stats?.due || 0)} ({allRows.due.length} txs)</span>
+                <span>→ Due — awaiting payout — {fmt0(r2((stats?.due || 0) - (stats?.transit || 0)))} ({allRows.due.length} txs)</span>
               </div>
               {!collapsed.due && groupedRows(allRows.due, 'due')}
             </div>
