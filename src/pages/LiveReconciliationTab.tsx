@@ -150,41 +150,35 @@ export default function LiveReconciliationTab({ bookings }: Props) {
     bank.filter(t => t.dateObj && t.dateObj >= cutoff).sort((a, b) => (b.dateObj?.getTime() || 0) - (a.dateObj?.getTime() || 0)), 
     [bank, cutoff]);
 
-  const filteredAirbnb = useMemo(() =>
-    airbnbPayouts.filter(p => {
-      const d = parseAny(p.date);
-      return d && d >= cutoff;
-    }), [airbnbPayouts, cutoff]);
-
-  const filteredBcom = useMemo(() =>
-    bcomReservations.filter(r => {
-      const d = r.payoutDate ? parseAny(String(r.payoutDate)) : null;
-      return d && d >= cutoff;
-    }), [bcomReservations, cutoff]);
-
+  // Matching ALWAYS runs on the full dataset — a June payout must be able to
+  // find its June bank transaction regardless of the display window. The
+  // 7/30/90-day selector only filters which rows are SHOWN below.
   const engine = useMemo(() => {
-    if (!filteredAirbnb.length && !filteredBcom.length && !filteredBank.length) return null;
+    if (!airbnbPayouts.length && !bcomReservations.length && !bank.length) return null;
     return reconcile(
       avantio,
-      filteredAirbnb.map(p => ({ ...p, bankDate: null, bankMatched: false, items: [...p.items] })),
-      filteredBcom.map(r => ({ ...r, bankDate: null, bankMatched: false })),
-      filteredBank.map(t => ({ ...t, used: false })),
+      airbnbPayouts.map(p => ({ ...p, bankDate: null, bankMatched: false, items: [...p.items] })),
+      bcomReservations.map(r => ({ ...r, bankDate: null, bankMatched: false })),
+      bank.map(t => ({ ...t, used: false })),
     );
-  }, [avantio, filteredAirbnb, filteredBcom, filteredBank]);
+  }, [avantio, airbnbPayouts, bcomReservations, bank]);
 
-  // separate issues from ok transactions
+  // separate issues from ok transactions; window applies to received/due.
+  // Issues always show regardless of window — an unresolved problem doesn't
+  // stop needing attention because it aged out of the last 7 days.
   const allRows = useMemo(() => {
     if (!engine) return { issues: [], received: [], due: [] };
     const rows = engine.rows.filter(r => r.bucket !== 'hidden');
+    const inWindow = (r: ReconRow) => r.sortDate !== null && r.sortDate >= cutoff;
     return {
       issues: rows.filter(r => r.bucket === 'issue').sort((a, b) => {
         const p = (l: string) => l === 'Short-paid' ? 0 : l === 'Overdue' ? 1 : l === 'Overpaid' ? 2 : 3;
         return p(a.label) - p(b.label);
       }),
-      received: rows.filter(r => r.bucket === 'paid').sort((a, b) => (b.sortDate?.getTime() || 0) - (a.sortDate?.getTime() || 0)),
-      due: rows.filter(r => r.bucket === 'onway').sort((a, b) => (a.sortDate?.getTime() || 0) - (b.sortDate?.getTime() || 0)),
+      received: rows.filter(r => r.bucket === 'paid' && inWindow(r)).sort((a, b) => (b.sortDate?.getTime() || 0) - (a.sortDate?.getTime() || 0)),
+      due: rows.filter(r => r.bucket === 'onway' && inWindow(r)).sort((a, b) => (a.sortDate?.getTime() || 0) - (b.sortDate?.getTime() || 0)),
     };
-  }, [engine]);
+  }, [engine, cutoff]);
 
   const stats = useMemo(() => {
     if (!engine) return null;
