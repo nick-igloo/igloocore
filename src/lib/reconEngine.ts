@@ -57,12 +57,15 @@ export interface ReconRow {
   bankDate: string;
   code: string;
   property: string;
+  checkin: string;
   checkout: string;
   channelPaid: number | null;
   expected: number | null;
   diff: number | null;
   commissionDue: number;
   note: string;
+  payoutKey: string | null;      // groups rows batch-paid in the same payout
+  payoutAmount: number | null;   // total of that payout (Airbnb)
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -290,17 +293,26 @@ export function reconcile(
     const pd = parseMDY(p.date);
     const mk = monthKeyOf(pd);
     const pdDisplay = dmy(pd, p.date);
+    const pKey = `AB|${p.date}|${p.amount.toFixed(2)}`;
+    // A payout Airbnb says it sent, still absent from the bank after 7 days,
+    // is a problem — not "in transit". Surface it.
+    const staleDays = !p.bankMatched && pd ? daysBetween(pd, today) : 0;
+    const stale = staleDays > 7;
     if (p.items.length === 0) {
       // email-notified payout: amount + date known, per-booking detail pending
       rows.push({
         channel: 'Airbnb', monthKey: mk, sortDate: pd,
-        bucket: p.bankMatched ? 'paid' : 'onway', label: 'Breakdown pending',
+        bucket: p.bankMatched ? 'paid' : stale ? 'issue' : 'onway',
+        label: p.bankMatched ? 'Breakdown pending' : stale ? 'Not in bank' : 'Breakdown pending',
         payoutDate: pdDisplay, bankDate: p.bankDate || '',
-        code: '\u2014', property: `Payout ${fmt(p.amount)}`, checkout: '',
+        code: '\u2014', property: `Payout ${fmt(p.amount)}`, checkin: '', checkout: '',
         channelPaid: p.amount, expected: null, diff: null, commissionDue: 0,
         note: p.bankMatched
           ? 'Landed in bank \u2014 booking detail arrives with next Airbnb CSV import'
-          : 'Airbnb notified by email \u2014 not yet in bank',
+          : stale
+            ? `Paid out ${pdDisplay}, not found in bank after ${staleDays} days \u2014 check Monzo feed coverage or chase Airbnb`
+            : 'Airbnb notified by email \u2014 not yet in bank',
+        payoutKey: pKey, payoutAmount: p.amount,
       });
       continue;
     }
@@ -310,11 +322,12 @@ export function reconcile(
         // Avantio expected values. They ride the payout's bank status.
         rows.push({
           channel: 'Airbnb', monthKey: mk, sortDate: pd,
-          bucket: p.bankMatched ? 'paid' : 'onway', label: 'Resolution',
+          bucket: p.bankMatched ? 'paid' : stale ? 'issue' : 'onway', label: 'Resolution',
           payoutDate: pdDisplay, bankDate: p.bankDate || '',
-          code: item.code, property: item.listing, checkout: '',
+          code: item.code, property: item.listing, checkin: '', checkout: '',
           channelPaid: item.amount, expected: null, diff: null, commissionDue: 0,
           note: item.type === 'Resolution Payout' ? 'Resolution payout' : 'Resolution adjustment',
+          payoutKey: pKey, payoutAmount: p.amount,
         });
         continue;
       }
@@ -325,17 +338,23 @@ export function reconcile(
         rows.push({
           channel: 'Airbnb', monthKey: mk, sortDate: pd, bucket: 'issue', label: 'Unknown',
           payoutDate: pdDisplay, bankDate: p.bankDate || '',
-          code: item.code, property: item.listing, checkout: '',
+          code: item.code, property: item.listing, checkin: '', checkout: '',
           channelPaid, expected: null, diff: null, commissionDue: 0,
           note: 'Not in the Avantio export \u2014 widen the booking list dates (Airbnb pays ~24h after check-in)',
+          payoutKey: pKey, payoutAmount: p.amount,
         });
         continue;
       }
       const diff = r2(channelPaid - av.expected);
       let bucket: Bucket; let label: string; let note = '';
       if (!p.bankMatched) {
-        bucket = 'onway'; label = 'In transit';
-        note = p.arriving ? `Arrives ${dmy(parseMDY(p.arriving), p.arriving)}` : 'Not yet in bank';
+        if (stale) {
+          bucket = 'issue'; label = 'Not in bank';
+          note = `Payout ${fmt(p.amount)} sent ${pdDisplay}, not found in bank after ${staleDays} days`;
+        } else {
+          bucket = 'onway'; label = 'In transit';
+          note = p.arriving ? `Arrives ${dmy(parseMDY(p.arriving), p.arriving)}` : 'Not yet in bank';
+        }
       } else if (Math.abs(diff) < 0.02) { bucket = 'paid'; label = 'Paid'; }
       else if (av.extras > 0 && Math.abs(diff + av.extras) < 0.02) {
         bucket = 'paid'; label = 'Paid';
@@ -348,8 +367,9 @@ export function reconcile(
       rows.push({
         channel: 'Airbnb', monthKey: mk, sortDate: pd, bucket, label,
         payoutDate: pdDisplay, bankDate: p.bankDate || '',
-        code: item.code, property: av.property, checkout: av.checkout,
+        code: item.code, property: av.property, checkin: av.checkin, checkout: av.checkout,
         channelPaid, expected: av.expected, diff, commissionDue: 0, note,
+        payoutKey: pKey, payoutAmount: p.amount,
       });
     }
   }
@@ -371,8 +391,9 @@ export function reconcile(
     rows.push({
       channel: 'Airbnb', monthKey: mk, sortDate: trigger, bucket, label,
       payoutDate: '', bankDate: '',
-      code: av.code, property: av.property, checkout: av.checkout,
+      code: av.code, property: av.property, checkin: av.checkin, checkout: av.checkout,
       channelPaid: null, expected: av.expected, diff: null, commissionDue: 0, note,
+      payoutKey: null, payoutAmount: null,
     });
   }
 
@@ -404,6 +425,8 @@ export function reconcile(
     }
   }
 
+  const bcKeyOf = (r: BcomReservation): string =>
+    `BC|${(r.statementDescriptor || '').trim() || r.payoutDate}`;
   const bcAvantio = avantio.filter(a => a.portal === 'booking.com');
   const bcByRef = new Map(bcAvantio.map(a => [a.code, a]));
   const bcomRefsPaidOut = new Set<string>();
@@ -418,9 +441,10 @@ export function reconcile(
       rows.push({
         channel: 'Booking.com', monthKey: mk, sortDate: pd, bucket: 'issue', label: 'Unknown',
         payoutDate: pdDisplay, bankDate: r.bankDate || '',
-        code: r.ref, property: r.property, checkout: r.checkout,
+        code: r.ref, property: r.property, checkin: r.checkin, checkout: r.checkout,
         channelPaid: r.payable, expected: null, diff: null, commissionDue: 0,
         note: 'Not in the Avantio export \u2014 widen the booking list dates',
+        payoutKey: bcKeyOf(r), payoutAmount: null,
       });
       continue;
     }
@@ -446,8 +470,9 @@ export function reconcile(
     rows.push({
       channel: 'Booking.com', monthKey: mk, sortDate: pd, bucket, label,
       payoutDate: pdDisplay, bankDate: r.bankDate || '',
-      code: r.ref, property: av.property, checkout: av.checkout,
+      code: r.ref, property: av.property, checkin: av.checkin, checkout: av.checkout,
       channelPaid: r.payable, expected: av.expected, diff, commissionDue, note,
+      payoutKey: bcKeyOf(r), payoutAmount: null,
     });
   }
 
@@ -468,8 +493,9 @@ export function reconcile(
     rows.push({
       channel: 'Booking.com', monthKey: mk, sortDate: trigger, bucket, label,
       payoutDate: '', bankDate: '',
-      code: av.code, property: av.property, checkout: av.checkout,
+      code: av.code, property: av.property, checkin: av.checkin, checkout: av.checkout,
       channelPaid: null, expected: av.expected, diff: null, commissionDue: 0, note,
+      payoutKey: null, payoutAmount: null,
     });
   }
 

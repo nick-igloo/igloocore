@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo, useCallback, useRef, CSSProperties } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, CSSProperties, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import {
-  BookingRecord, AvantioBooking, AirbnbPayout, AirbnbItem, BcomReservation, BankTx,
+  BookingRecord, AvantioBooking, AirbnbPayout, AirbnbItem, BcomReservation, BankTx, ReconRow,
   toAvantio, parseAirbnbCsv, parseAny, reconcile, r2, dmy, fmt, fmt0,
 } from '../lib/reconEngine';
 
@@ -253,7 +253,7 @@ export default function LiveReconciliationTab({ bookings }: Props) {
         setSetupMsg(
           badSums.length
             ? `${imported} payouts imported \u2014 \u26A0 ${badSums.length} with item sums that don't match the payout total (${badSums.map(p => `${p.date} \u00A3${p.amount.toFixed(2)}`).join(', ')}) \u2014 check for a new Airbnb row type`
-            : `${imported} payouts imported \u2014 all item sums verified \u2713`
+            : `${imported} payouts imported \u2014 all item sums verified ✓`
         );
       } catch (err: any) { setSetupMsg('Import failed: ' + (err?.message || String(err))); }
       setBusy(false);
@@ -262,21 +262,95 @@ export default function LiveReconciliationTab({ bookings }: Props) {
     r.readAsText(file);
   }, []);
 
-  const rowLine = (r: any, i: number) => {
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const detailField = (label: string, value: string | null | undefined) =>
+    value ? (
+      <div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
+        <div style={{ fontSize: 12.5, color: C.navyDeep, fontWeight: 600, marginTop: 1 }}>{value}</div>
+      </div>
+    ) : null;
+
+  const rowLine = (r: ReconRow, rid: string, indent: boolean) => {
     const st = r.bucket === 'issue' ? { bg: '#fde0d8', fg: '#9a2a1a' } : { bg: '#d8f0e5', fg: '#1a6e42' };
     const amount = r.label === 'Short-paid' && r.diff != null ? r.diff : (r.channelPaid ?? r.expected ?? null);
+    const isOpen = expanded === rid;
+    const stay = r.checkin && r.checkout ? `${r.checkin} \u2192 ${r.checkout}` : (r.checkout || r.checkin || '');
     return (
-      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 20px', borderBottom: `1px solid ${C.surface2}`, fontSize: 13 }}>
-        <span style={{ ...st, display: 'inline-block', padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, width: 80, textAlign: 'center' }}>{r.label}</span>
-        <span style={{ fontWeight: 600, color: C.navyDeep, width: 190, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.property}>{r.property}</span>
-        <span style={{ fontFamily: 'monospace', fontSize: 11, color: C.dim, width: 110 }}>{r.code}</span>
-        <span style={{ color: C.muted, fontSize: 12, width: 78 }}>{r.checkout || r.payoutDate}</span>
-        <span style={{ color: C.dim, fontSize: 11.5, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.note}</span>
-        <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: r.bucket === 'issue' ? C.coral : C.green, minWidth: 84, textAlign: 'right' }}>
-          {amount != null ? fmt(amount) : ''}
-        </span>
+      <div key={rid}>
+        <div
+          onClick={() => setExpanded(isOpen ? null : rid)}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: `8px 20px 8px ${indent ? 36 : 20}px`, borderBottom: `1px solid ${C.surface2}`, fontSize: 13, cursor: 'pointer', background: isOpen ? '#f7f9fc' : undefined }}
+        >
+          <span style={{ ...st, display: 'inline-block', padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, width: 80, textAlign: 'center', flexShrink: 0 }}>{r.label}</span>
+          <span style={{ fontWeight: 600, color: C.navyDeep, width: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.property}>{r.property}</span>
+          <span style={{ fontFamily: 'monospace', fontSize: 11, color: C.dim, width: 100 }}>{r.code}</span>
+          <span style={{ color: C.muted, fontSize: 11.5, width: 150, whiteSpace: 'nowrap' }} title="Stay dates (check-in → check-out)">{stay}</span>
+          <span style={{ color: C.dim, fontSize: 11.5, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.note}</span>
+          <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: r.bucket === 'issue' ? C.coral : C.green, minWidth: 84, textAlign: 'right' }}>
+            {amount != null ? fmt(amount) : ''}
+          </span>
+          <span style={{ color: C.dim, fontSize: 10, width: 12 }}>{isOpen ? '\u25B4' : '\u25BE'}</span>
+        </div>
+        {isOpen && (
+          <div style={{ padding: `12px 20px 14px ${indent ? 36 : 20}px`, background: '#f7f9fc', borderBottom: `1px solid ${C.surface2}`, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px 18px' }}>
+            {detailField('Property', r.property)}
+            {detailField('Booking code', r.code)}
+            {detailField('Check-in', r.checkin)}
+            {detailField('Check-out', r.checkout)}
+            {detailField('Channel', r.channel)}
+            {detailField('Payout sent', r.payoutDate)}
+            {detailField('Landed in bank', r.bankDate || (r.payoutDate ? 'Not yet' : ''))}
+            {detailField('Payout batch total', r.payoutAmount != null ? fmt(r.payoutAmount) : '')}
+            {detailField('Channel paid', r.channelPaid != null ? fmt(r.channelPaid) : '')}
+            {detailField('Expected (Avantio)', r.expected != null ? fmt(r.expected) : '')}
+            {detailField('Difference', r.diff != null && Math.abs(r.diff) >= 0.005 ? fmt(r.diff) : '')}
+            {detailField('Commission to invoice', r.commissionDue ? fmt(r.commissionDue) : '')}
+            {r.note && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: 0.4 }}>Status</div>
+                <div style={{ fontSize: 12.5, color: C.navyDeep, marginTop: 1 }}>{r.note}</div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
+  };
+
+  // Group a bucket's rows: rows sharing a payoutKey render under a payout
+  // header (batch-paid together); rows without one render standalone.
+  const groupedRows = (rows: ReconRow[], keyPrefix: string) => {
+    const groups: { key: string | null; rows: ReconRow[] }[] = [];
+    const byKey = new Map<string, { key: string; rows: ReconRow[] }>();
+    for (const r of rows) {
+      if (r.payoutKey) {
+        let g = byKey.get(r.payoutKey);
+        if (!g) { g = { key: r.payoutKey, rows: [] }; byKey.set(r.payoutKey, g); groups.push(g); }
+        g.rows.push(r);
+      } else groups.push({ key: null, rows: [r] });
+    }
+    const out: ReactNode[] = [];
+    groups.forEach((g, gi) => {
+      const showHeader = g.key !== null && g.rows.length > 1;
+      if (showHeader) {
+        const first = g.rows[0];
+        const batchTotal = first.payoutAmount ?? r2(g.rows.reduce((s, r) => s + (r.channelPaid || 0), 0));
+        out.push(
+          <div key={`${keyPrefix}-h-${gi}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 20px', background: '#f0f4f9', borderBottom: `1px solid ${C.surface2}`, fontSize: 11.5, fontWeight: 700, color: C.navy }}>
+            <span>{first.channel} payout {fmt(batchTotal)}</span>
+            <span style={{ fontWeight: 500, color: C.muted }}>· {g.rows.length} bookings</span>
+            {first.payoutDate && <span style={{ fontWeight: 500, color: C.muted }}>· sent {first.payoutDate}</span>}
+            <span style={{ fontWeight: 600, color: first.bankDate ? C.green : C.coral }}>
+              · {first.bankDate ? `landed in bank ${first.bankDate} ✓` : 'not in bank'}
+            </span>
+          </div>
+        );
+      }
+      g.rows.forEach((r, ri) => out.push(rowLine(r, `${keyPrefix}-${gi}-${ri}-${r.code}`, showHeader)));
+    });
+    return out;
   };
 
   const bankLine = (t: BankTx, i: number) => (
@@ -372,7 +446,7 @@ export default function LiveReconciliationTab({ bookings }: Props) {
                 <span>{collapsed.issues ? '▾' : '▸'}</span>
                 <span>⚠ {allRows.issues.length} issue{allRows.issues.length !== 1 ? 's' : ''} need attention</span>
               </div>
-              {!collapsed.issues && allRows.issues.map((r, i) => rowLine(r, i))}
+              {!collapsed.issues && groupedRows(allRows.issues, 'iss')}
             </div>
           )}
 
@@ -383,7 +457,7 @@ export default function LiveReconciliationTab({ bookings }: Props) {
                 <span>{collapsed.received ? '▾' : '▸'}</span>
                 <span>✓ Received — {fmt0(stats?.received || 0)} ({allRows.received.length} txs)</span>
               </div>
-              {!collapsed.received && allRows.received.map((r, i) => rowLine(r, i))}
+              {!collapsed.received && groupedRows(allRows.received, 'rcv')}
             </div>
           )}
 
@@ -394,7 +468,7 @@ export default function LiveReconciliationTab({ bookings }: Props) {
                 <span>{collapsed.due ? '▾' : '▸'}</span>
                 <span>→ Due — {fmt0(stats?.due || 0)} ({allRows.due.length} txs)</span>
               </div>
-              {!collapsed.due && allRows.due.map((r, i) => rowLine(r, 1000 + i))}
+              {!collapsed.due && groupedRows(allRows.due, 'due')}
             </div>
           )}
 
