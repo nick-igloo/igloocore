@@ -1,94 +1,77 @@
 import { useState, useEffect, useMemo, useCallback, useRef, CSSProperties } from 'react';
 import { supabase } from '../lib/supabase';
-import ReconView from '../components/ReconView';
 import {
   BookingRecord, AvantioBooking, AirbnbPayout, AirbnbItem, BcomReservation, BankTx,
-  toAvantio, parseAirbnbCsv, parseAny, parseMDY, reconcile, cleanNum, r2, dmy,
+  toAvantio, parseAirbnbCsv, parseAny, reconcile, r2, dmy, fmt, fmt0,
 } from '../lib/reconEngine';
 
 // ═══════════════════════════════════════════════════════════════════
 // src/pages/LiveReconciliationTab.tsx — LIVE reconciliation
-// Reads from Supabase (fed by n8n: Booking.com report emails, Airbnb
-// payout emails, Monzo Google Sheet). Same engine + view as Manual.
-// Extra controls: refresh, "Save expected values" (pushes the Avantio
-// CSV loaded on the Processor tab into Supabase until the Avantio API
-// pipeline exists), and "Import Airbnb CSV" (enriches email-skeleton
-// payouts with per-booking detail).
+// Shows what's happening now. No manual uploads needed once n8n is
+// running. Setup actions hidden in a collapsible drawer.
 // ═══════════════════════════════════════════════════════════════════
 
 const C = {
-  navy: '#1a4a7a', surface2: '#eef3f9', border: '#d4e2ef',
-  muted: '#5a7a9a', dim: '#9ab0c5', navyDeep: '#0d2850', coral: '#e8513a',
+  navy: '#1a4a7a', navyDeep: '#0d2850', blue: '#3a8fd1', bluePale: '#ddeeff',
+  coral: '#e8513a', amber: '#e8a020', green: '#3ab87a',
+  bg: '#f0f4f9', surface: '#ffffff', surface2: '#eef3f9',
+  border: '#d4e2ef', muted: '#5a7a9a', dim: '#9ab0c5',
 };
-const sBtn: CSSProperties = { padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, fontFamily: "'Outfit', sans-serif", display: 'inline-flex', alignItems: 'center', gap: 6 };
-const sGhost: CSSProperties = { ...sBtn, background: '#eef3f9', color: '#5a7a9a', border: '1px solid #d4e2ef' };
 
-// ISO yyyy-mm-dd from mm/dd/yyyy
-function isoFromMDY(s: string): string | null {
-  const p = (s || '').trim().split('/');
-  return p.length === 3 ? `${p[2]}-${p[0].padStart(2, '0')}-${p[1].padStart(2, '0')}` : null;
-}
+const sCard: CSSProperties = {
+  background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
+  boxShadow: '0 1px 4px rgba(26,74,122,0.07)',
+};
+const sBtn = (active = false): CSSProperties => ({
+  padding: '7px 16px', borderRadius: 8, border: `1px solid ${active ? C.navy : C.border}`,
+  background: active ? C.navy : C.surface, color: active ? '#fff' : C.muted,
+  cursor: 'pointer', fontWeight: 600, fontSize: 12,
+  fontFamily: "'Outfit', sans-serif", display: 'inline-flex', alignItems: 'center', gap: 6,
+});
+const sBadge = (bg: string, fg: string): CSSProperties => ({
+  display: 'inline-block', padding: '3px 8px', borderRadius: 6,
+  fontSize: 10, fontWeight: 700, background: bg, color: fg, whiteSpace: 'nowrap',
+});
+
+const LABEL_STYLE: Record<string, { bg: string; fg: string }> = {
+  'Paid':                { bg: '#d8f0e5', fg: '#1a6e42' },
+  'Resolution':          { bg: C.surface2, fg: C.muted },
+  'In transit':          { bg: C.bluePale, fg: C.navy },
+  'Due':                 { bg: C.bluePale, fg: C.navy },
+  'Upcoming':            { bg: C.surface2, fg: C.muted },
+  'Overdue':             { bg: '#fde0d8', fg: '#9a2a1a' },
+  'Short-paid':          { bg: '#fde0d8', fg: '#9a2a1a' },
+  'Overpaid':            { bg: '#fdefd5', fg: '#7a4e10' },
+  'Unknown':             { bg: '#fdefd5', fg: '#7a4e10' },
+  'Breakdown pending':   { bg: C.bluePale, fg: C.navy },
+};
+
+type Window = '7d' | '30d' | '90d';
+const WINDOWS: { key: Window; label: string; days: number }[] = [
+  { key: '7d', label: 'Last 7 days', days: 7 },
+  { key: '30d', label: 'Last 30 days', days: 30 },
+  { key: '90d', label: 'Last 90 days', days: 90 },
+];
+
+interface Props { bookings: BookingRecord[]; }
+
 function isoFromDMY(s: string): string | null {
   const p = (s || '').trim().split('/');
   return p.length === 3 ? `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}` : null;
 }
-
-// ── Airbnb monthly CSV → Supabase (enriches email skeletons) ──
-async function ingestAirbnbCsv(text: string): Promise<string> {
-  const payouts = parseAirbnbCsv(text);
-  let imported = 0;
-  for (const p of payouts) {
-    const payoutRow = {
-      payout_date: isoFromMDY(p.date),
-      arriving_date: isoFromMDY(p.arriving),
-      amount: r2(p.amount),
-      airbnb_ref: null as string | null,   // Airbnb CSV has no stable ref column in this export
-      source: 'csv' as const,
-    };
-    // upsert by (payout_date, amount): find existing csv row first
-    const { data: existing } = await supabase
-      .from('recon_airbnb_payouts')
-      .select('id')
-      .eq('payout_date', payoutRow.payout_date)
-      .eq('amount', payoutRow.amount)
-      .eq('source', 'csv')
-      .maybeSingle();
-    let payoutId: string;
-    if (existing) {
-      payoutId = existing.id;
-    } else {
-      const { data: up, error } = await supabase
-        .from('recon_airbnb_payouts')
-        .insert(payoutRow)
-        .select('id')
-        .single();
-      if (error || !up) continue;
-      payoutId = up.id;
-    }
-    const itemRows = p.items.map(i => ({
-      payout_id: payoutId,
-      item_type: i.type,
-      code: i.code,
-      listing: i.listing,
-      amount: r2(i.amount),
-      pass_through: r2(i.passThrough),
-    }));
-    if (itemRows.length) {
-      await supabase.from('recon_airbnb_payout_items')
-        .upsert(itemRows, { onConflict: 'payout_id,code,item_type' });
-    }
-    imported++;
-  }
-  return `${imported} payouts imported`;
+function isoFromMDY(s: string): string | null {
+  const p = (s || '').trim().split('/');
+  return p.length === 3 ? `${p[2]}-${p[0].padStart(2, '0')}-${p[1].padStart(2, '0')}` : null;
 }
 
-interface Props { bookings: BookingRecord[]; }
-
-function LiveReconciliationTab({ bookings }: Props) {
+export default function LiveReconciliationTab({ bookings }: Props) {
+  const [window, setWindow] = useState<Window>('7d');
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [showSetup, setShowSetup] = useState(false);
+  const [setupMsg, setSetupMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const abRef = useRef<HTMLInputElement>(null);
 
@@ -120,8 +103,7 @@ function LiveReconciliationTab({ bookings }: Props) {
           checkinDate: r.checkin ? parseAny(r.checkin) : null,
           checkoutDate: r.checkout ? parseAny(r.checkout) : null,
           paid: Number(r.paid), commission: Number(r.commission),
-          extras: Number(r.extras ?? 0),
-          expected: Number(r.expected),
+          extras: Number(r.extras ?? 0), expected: Number(r.expected),
         }));
 
         const itemsByPayout: Record<string, AirbnbItem[]> = {};
@@ -136,9 +118,8 @@ function LiveReconciliationTab({ bookings }: Props) {
           const d = p.payout_date ? parseAny(p.payout_date) : null;
           const arr = p.arriving_date ? parseAny(p.arriving_date) : null;
           return {
-            // engine expects mm/dd/yyyy strings (Airbnb file format)
-            date: d ? `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}` : '',
-            arriving: arr ? `${String(arr.getMonth() + 1).padStart(2, '0')}/${String(arr.getDate()).padStart(2, '0')}/${arr.getFullYear()}` : '',
+            date: d ? `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}` : '',
+            arriving: arr ? `${String(arr.getMonth()+1).padStart(2,'0')}/${String(arr.getDate()).padStart(2,'0')}/${arr.getFullYear()}` : '',
             amount: Number(p.amount),
             items: itemsByPayout[p.id] || [],
             bankDate: null, bankMatched: false,
@@ -163,6 +144,7 @@ function LiveReconciliationTab({ bookings }: Props) {
 
         setAvantio(av); setAirbnbPayouts(ap); setBcomReservations(bc); setBank(bk);
         setCounts({ avantio: av.length, payouts: ap.length, bcom: bc.length, bank: bk.length });
+        setLastRefresh(new Date());
       } catch (e: any) {
         setLoadErr(e?.message || 'Failed to load');
       } finally {
@@ -171,94 +153,240 @@ function LiveReconciliationTab({ bookings }: Props) {
     })();
   }, [refreshKey]);
 
+  // filter everything to the selected time window
+  const windowDays = WINDOWS.find(w => w.key === window)?.days || 7;
+  const cutoff = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - windowDays);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, [windowDays]);
+
+  const filteredBank = useMemo(() =>
+    bank.filter(t => t.dateObj && t.dateObj >= cutoff), [bank, cutoff]);
+
+  const filteredAirbnb = useMemo(() =>
+    airbnbPayouts.filter(p => {
+      const d = parseAny(p.date);
+      return d && d >= cutoff;
+    }), [airbnbPayouts, cutoff]);
+
+  const filteredBcom = useMemo(() =>
+    bcomReservations.filter(r => {
+      const d = r.payoutDate ? parseAny(String(r.payoutDate)) : null;
+      return d && d >= cutoff;
+    }), [bcomReservations, cutoff]);
+
   const engine = useMemo(() => {
-    if (!avantio.length && !airbnbPayouts.length && !bcomReservations.length) return null;
+    if (!filteredAirbnb.length && !filteredBcom.length && !filteredBank.length) return null;
     return reconcile(
       avantio,
-      airbnbPayouts.map(p => ({ ...p, bankDate: null, bankMatched: false, items: [...p.items] })),
-      bcomReservations.map(r => ({ ...r, bankDate: null, bankMatched: false })),
-      bank.map(t => ({ ...t, used: false })),
+      filteredAirbnb.map(p => ({ ...p, bankDate: null, bankMatched: false, items: [...p.items] })),
+      filteredBcom.map(r => ({ ...r, bankDate: null, bankMatched: false })),
+      filteredBank.map(t => ({ ...t, used: false })),
     );
-  }, [avantio, airbnbPayouts, bcomReservations, bank]);
+  }, [avantio, filteredAirbnb, filteredBcom, filteredBank]);
 
-  const saveAvantio = useCallback(async () => {
+  // summary stats
+  const stats = useMemo(() => {
+    if (!engine) return null;
+    const rows = engine.rows.filter(r => r.bucket !== 'hidden');
+    const issues = rows.filter(r => r.bucket === 'issue');
+    const received = rows.filter(r => r.bucket === 'paid').reduce((s, r) => s + (r.channelPaid || 0), 0);
+    const onway = rows.filter(r => r.bucket === 'onway').reduce((s, r) => s + (r.channelPaid ?? r.expected ?? 0), 0);
+    return { issues: issues.length, received: r2(received), onway: r2(onway) };
+  }, [engine]);
+
+  // setup actions
+  const syncAvantio = useCallback(async () => {
     const rows = toAvantio(bookings).map(a => ({
-      booking_number: a.bookingNumber, code: a.code, portal: a.portal,
-      property: a.property,
+      booking_number: a.bookingNumber, code: a.code, portal: a.portal, property: a.property,
       checkin: isoFromDMY(a.checkin), checkout: isoFromDMY(a.checkout),
       paid: a.paid, commission: a.commission, extras: a.extras, expected: a.expected,
     }));
-    if (!rows.length) { setMsg('Load the Avantio CSV on the Processor tab first'); return; }
-    setBusy(true); setMsg('Saving\u2026');
-    const { error } = await supabase.from('recon_avantio_bookings')
-      .upsert(rows, { onConflict: 'booking_number' });
-    setMsg(error ? 'Save failed: ' + error.message : `${rows.length} expected values saved`);
+    if (!rows.length) { setSetupMsg('Load the Avantio CSV on the Processor tab first'); return; }
+    setBusy(true); setSetupMsg('Syncing…');
+    const { error } = await supabase.from('recon_avantio_bookings').upsert(rows, { onConflict: 'booking_number' });
+    setSetupMsg(error ? 'Failed: ' + error.message : `${rows.length} bookings synced`);
     setBusy(false);
     if (!error) setRefreshKey(k => k + 1);
   }, [bookings]);
 
-  const importAirbnb = useCallback((file: File) => {
-    setBusy(true); setMsg('Importing ' + file.name + '\u2026');
+  const importAirbnbCsv = useCallback((file: File) => {
+    setBusy(true); setSetupMsg('Importing ' + file.name + '…');
     const r = new FileReader();
     r.onload = async e => {
       try {
-        setMsg(await ingestAirbnbCsv(e.target?.result as string));
-      } catch (err: any) {
-        setMsg('Import failed: ' + (err?.message || String(err)));
-      }
+        const payouts = parseAirbnbCsv(e.target?.result as string);
+        let imported = 0;
+        for (const p of payouts) {
+          const payoutRow = {
+            payout_date: isoFromMDY(p.date), arriving_date: isoFromMDY(p.arriving),
+            amount: r2(p.amount), airbnb_ref: null as string | null, source: 'csv' as const,
+          };
+          const { data: existing } = await supabase.from('recon_airbnb_payouts').select('id')
+            .eq('payout_date', payoutRow.payout_date).eq('amount', payoutRow.amount)
+            .eq('source', 'csv').maybeSingle();
+          let payoutId: string;
+          if (existing) { payoutId = existing.id; }
+          else {
+            const { data: up, error } = await supabase.from('recon_airbnb_payouts').insert(payoutRow).select('id').single();
+            if (error || !up) continue;
+            payoutId = up.id;
+          }
+          if (p.items.length) {
+            await supabase.from('recon_airbnb_payout_items').upsert(
+              p.items.map(i => ({ payout_id: payoutId, item_type: i.type, code: i.code, listing: i.listing, amount: r2(i.amount), pass_through: r2(i.passThrough) })),
+              { onConflict: 'payout_id,code,item_type' }
+            );
+          }
+          imported++;
+        }
+        setSetupMsg(`${imported} payouts imported`);
+      } catch (err: any) { setSetupMsg('Import failed: ' + (err?.message || String(err))); }
       setBusy(false);
       setRefreshKey(k => k + 1);
     };
     r.readAsText(file);
   }, []);
 
-  const toolbar = (
-    <>
-      <button style={{ ...sBtn, background: C.navy, color: '#fff' }} onClick={() => setRefreshKey(k => k + 1)} disabled={busy}>
-        &#8635; Refresh
-      </button>
-      <button style={sGhost} onClick={saveAvantio} disabled={busy || !bookings.length}
-        title="Push the Avantio CSV loaded on the Processor tab into the live database">
-        Save expected values{bookings.length ? ` (${bookings.length})` : ''}
-      </button>
-      <button style={sGhost} onClick={() => abRef.current?.click()} disabled={busy}
-        title="Monthly Airbnb transaction CSV — adds per-booking detail to email-notified payouts">
-        Import Airbnb CSV
-      </button>
-      <input ref={abRef} type="file" accept=".csv" style={{ display: 'none' }}
-        onChange={e => { if (e.target.files?.[0]) importAirbnb(e.target.files[0]); e.target.value = ''; }} />
-      <span style={{ fontSize: 11.5, color: C.dim }}>
-        {msg || `${counts.avantio} expected \u00B7 ${counts.payouts} Airbnb payouts \u00B7 ${counts.bcom} B.com \u00B7 ${counts.bank} bank txs`}
-      </span>
-    </>
-  );
-
-  if (loading) {
-    return <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: '48px 24px', textAlign: 'center', color: C.muted, fontSize: 13 }}>Loading live position\u2026</div>;
-  }
-  if (loadErr) {
+  const rowLine = (r: any, i: number) => {
+    const st = LABEL_STYLE[r.label] || LABEL_STYLE['Paid'];
+    const amount = r.label === 'Short-paid' && r.diff != null ? r.diff : (r.channelPaid ?? r.expected ?? null);
     return (
-      <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.coral}`, borderRadius: 12, padding: '20px 24px' }}>
-        <div style={{ fontWeight: 600, fontSize: 13, color: C.coral, marginBottom: 4 }}>Couldn't load live data</div>
-        <div style={{ color: C.muted, fontSize: 12 }}>{loadErr}</div>
-        <div style={{ color: C.dim, fontSize: 11.5, marginTop: 6 }}>Check the recon_* tables exist in Supabase (run recon_schema.sql).</div>
+      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 20px', borderBottom: `1px solid ${C.surface2}`, fontSize: 13 }}>
+        <span style={{ ...sBadge(st.bg, st.fg), width: 80, textAlign: 'center' }}>{r.label}</span>
+        <span style={{ fontWeight: 600, color: C.navyDeep, width: 190, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.property}>{r.property}</span>
+        <span style={{ fontFamily: 'monospace', fontSize: 11, color: C.dim, width: 110 }}>{r.code}</span>
+        <span style={{ color: C.muted, fontSize: 12, width: 78 }}>{r.checkout || r.payoutDate}</span>
+        <span style={{ color: C.dim, fontSize: 11.5, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.note}</span>
+        <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: r.label === 'Short-paid' ? C.coral : C.navyDeep, minWidth: 84, textAlign: 'right' }}>
+          {amount != null ? fmt(amount) : ''}
+        </span>
       </div>
     );
-  }
+  };
+
+  if (loading) return (
+    <div style={{ ...sCard, padding: '48px 24px', textAlign: 'center', color: C.muted, fontSize: 13 }}>Loading…</div>
+  );
+
+  if (loadErr) return (
+    <div style={{ ...sCard, padding: '20px 24px', borderLeft: `3px solid ${C.coral}` }}>
+      <div style={{ fontWeight: 600, fontSize: 13, color: C.coral, marginBottom: 4 }}>Couldn't load live data</div>
+      <div style={{ color: C.muted, fontSize: 12 }}>{loadErr}</div>
+    </div>
+  );
 
   return (
-    <ReconView
-      engine={engine}
-      toolbar={toolbar}
-      exportPrefix="reconciliation_live"
-      emptyMessage={
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: C.navyDeep, marginBottom: 4 }}>No live data yet</div>
-          <div style={{ color: C.dim, fontSize: 12.5 }}>Once the n8n workflows are running this fills itself. To seed it now: load the Avantio CSV on the Processor tab, click "Save expected values", then Import the Airbnb CSV.</div>
+    <div>
+      {/* ── HEADER BAR ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+        {/* Window buttons */}
+        {WINDOWS.map(w => (
+          <button key={w.key} style={sBtn(window === w.key)} onClick={() => setWindow(w.key)}>{w.label}</button>
+        ))}
+
+        {/* Spacer */}
+        <div style={{ flex: 1 }} />
+
+        {/* Last refresh */}
+        {lastRefresh && (
+          <span style={{ fontSize: 11.5, color: C.dim }}>
+            Updated {lastRefresh.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
+
+        {/* Refresh */}
+        <button style={sBtn()} onClick={() => setRefreshKey(k => k + 1)}>↻ Refresh</button>
+
+        {/* Setup drawer toggle */}
+        <button style={{ ...sBtn(), color: C.dim }} onClick={() => setShowSetup(s => !s)}>
+          ⚙ Setup {showSetup ? '▴' : '▾'}
+        </button>
+      </div>
+
+      {/* ── SETUP DRAWER ── */}
+      {showSetup && (
+        <div style={{ ...sCard, padding: '16px 20px', marginBottom: 20, background: C.surface2, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>One-time setup / backfill</span>
+          <div style={{ width: 1, height: 20, background: C.border }} />
+          <button style={sBtn()} onClick={syncAvantio} disabled={busy}>
+            Sync Avantio data {bookings.length ? `(${bookings.length} bookings loaded)` : '— load CSV on Processor tab first'}
+          </button>
+          <button style={sBtn()} onClick={() => abRef.current?.click()} disabled={busy}>
+            Import monthly Airbnb CSV
+          </button>
+          <input ref={abRef} type="file" accept=".csv" style={{ display: 'none' }}
+            onChange={e => { if (e.target.files?.[0]) importAirbnbCsv(e.target.files[0]); e.target.value = ''; }} />
+          {setupMsg && <span style={{ fontSize: 12, color: C.muted }}>{setupMsg}</span>}
+          <div style={{ marginLeft: 'auto', fontSize: 11, color: C.dim }}>
+            {counts.avantio} expected · {counts.payouts} Airbnb payouts · {counts.bcom} B.com · {counts.bank} bank txs
+          </div>
         </div>
-      }
-    />
+      )}
+
+      {/* ── SUMMARY STRIP ── */}
+      {stats && (
+        <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+          <div style={{ ...sCard, flex: 1, padding: '16px 20px' }}>
+            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Received</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: '#1a6e42' }}>{fmt0(stats.received)}</div>
+          </div>
+          <div style={{ ...sCard, flex: 1, padding: '16px 20px' }}>
+            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>On its way</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: C.navy }}>{fmt0(stats.onway)}</div>
+          </div>
+          <div style={{ ...sCard, flex: 1, padding: '16px 20px' }}>
+            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Issues</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: stats.issues > 0 ? C.coral : '#1a6e42' }}>
+              {stats.issues > 0 ? stats.issues : '✓ None'}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── NO DATA ── */}
+      {!engine && (
+        <div style={{ ...sCard, padding: '48px 24px', textAlign: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.navyDeep, marginBottom: 4 }}>No activity in this window</div>
+          <div style={{ color: C.dim, fontSize: 12.5 }}>n8n feeds this automatically. Try widening the window, or check the n8n workflows are active.</div>
+        </div>
+      )}
+
+      {/* ── CHANNEL CARDS ── */}
+      {engine && (['Airbnb', 'Booking.com'] as const).map(ch => {
+        const chRows = engine.rows.filter(r => r.channel === ch && r.bucket !== 'hidden');
+        const issues = chRows.filter(r => r.bucket === 'issue').sort((a, b) => {
+          const p = (l: string) => l === 'Short-paid' ? 0 : l === 'Overdue' ? 1 : 2;
+          return p(a.label) - p(b.label);
+        });
+        const onway = chRows.filter(r => r.bucket === 'onway').sort((a, b) => (a.sortDate?.getTime() || 0) - (b.sortDate?.getTime() || 0));
+        const paid = chRows.filter(r => r.bucket === 'paid').sort((a, b) => (b.sortDate?.getTime() || 0) - (a.sortDate?.getTime() || 0));
+        const received = r2(paid.reduce((s, r) => s + (r.channelPaid || 0), 0));
+        const onwayTotal = r2(onway.reduce((s, r) => s + (r.channelPaid ?? r.expected ?? 0), 0));
+        const shortTotal = r2(issues.filter(r => r.label === 'Short-paid').reduce((s, r) => s + (r.diff || 0), 0));
+        if (!chRows.length && !issues.length) return null;
+        return (
+          <div key={ch} style={{ ...sCard, marginBottom: 16 }}>
+            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, background: ch === 'Airbnb' ? '#fdf6f4' : '#f4f9fd', display: 'flex', alignItems: 'baseline', gap: 20, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 15, fontWeight: 800, color: C.navyDeep, minWidth: 120 }}>{ch}</span>
+              <span style={{ fontSize: 13, color: C.muted }}>Received <b style={{ color: '#1a6e42' }}>{fmt0(received)}</b></span>
+              {onwayTotal > 0 && <span style={{ fontSize: 13, color: C.muted }}>On its way <b style={{ color: C.navy }}>{fmt0(onwayTotal)}</b></span>}
+              {issues.length > 0
+                ? <span style={{ fontSize: 13, color: C.coral, fontWeight: 700 }}>⚠ {issues.length} issue{issues.length !== 1 ? 's' : ''}{shortTotal < 0 ? ` (${fmt(shortTotal)})` : ''}</span>
+                : <span style={{ fontSize: 13, color: '#1a6e42', fontWeight: 600 }}>✓ No issues</span>}
+            </div>
+            {issues.map((r, i) => rowLine(r, i))}
+            {onway.map((r, i) => rowLine(r, 1000 + i))}
+            {paid.length > 0 && (
+              <div style={{ padding: '8px 20px', color: C.dim, fontSize: 12 }}>
+                {paid.length} paid booking{paid.length !== 1 ? 's' : ''} — {fmt0(received)} received in this window
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
-
-export default LiveReconciliationTab;
