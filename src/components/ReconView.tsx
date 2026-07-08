@@ -45,11 +45,22 @@ interface Props {
   toolbar?: ReactNode;          // tab-specific controls, rendered in the top bar
   emptyMessage?: ReactNode;     // shown when engine is null
   exportPrefix?: string;
+  viewMode?: 'month' | 'today' | 'range';  // display mode
+  dateRange?: { start: Date; end: Date };  // for 'range' mode
+  onViewModeChange?: (mode: 'month' | 'today' | 'range') => void;
+  onDateRangeChange?: (start: Date, end: Date) => void;
 }
 
-export default function ReconView({ engine, toolbar, emptyMessage, exportPrefix = 'reconciliation' }: Props) {
+export default function ReconView({ 
+  engine, toolbar, emptyMessage, exportPrefix = 'reconciliation',
+  viewMode: initialViewMode = 'month',
+  dateRange: initialDateRange,
+  onViewModeChange, onDateRangeChange
+}: Props) {
   const [selectedMonth, setSelectedMonth] = useState<string>(monthKeyOf(new Date()));
   const [showPaid, setShowPaid] = useState<Record<string, boolean>>({});
+  const [viewMode, setViewMode] = useState<'month' | 'today' | 'range'>(initialViewMode);
+  const [dateRange, setDateRange] = useState<{ start: Date; end: Date } | null>(initialDateRange || null);
 
   const availableMonths = useMemo(() => {
     if (!engine) return [];
@@ -62,10 +73,27 @@ export default function ReconView({ engine, toolbar, emptyMessage, exportPrefix 
     ? selectedMonth
     : (availableMonths[0] || selectedMonth);
 
+  const getActiveRows = useMemo(() => {
+    if (!engine) return [];
+    let rows = engine.rows.filter(r => r.bucket !== 'hidden');
+    
+    if (viewMode === 'today') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      rows = rows.filter(r => r.sortDate && r.sortDate >= today);
+    } else if (viewMode === 'range' && dateRange) {
+      rows = rows.filter(r => r.sortDate && r.sortDate >= dateRange.start && r.sortDate <= dateRange.end);
+    } else {
+      // month mode
+      rows = rows.filter(r => r.monthKey === activeMonth);
+    }
+    return rows;
+  }, [engine, viewMode, activeMonth, dateRange]);
+
   const channels = useMemo(() => {
     if (!engine) return [];
     return (['Airbnb', 'Booking.com'] as const).map(ch => {
-      const chRows = engine.rows.filter(r => r.channel === ch && r.monthKey === activeMonth && r.bucket !== 'hidden');
+      const chRows = getActiveRows.filter(r => r.channel === ch);
       const issuePriority = (l: string) => l === 'Short-paid' ? 0 : l === 'Overdue' ? 1 : 2;
       const issues = chRows.filter(r => r.bucket === 'issue')
         .sort((a, b) => issuePriority(a.label) - issuePriority(b.label));
@@ -73,7 +101,19 @@ export default function ReconView({ engine, toolbar, emptyMessage, exportPrefix 
         .sort((a, b) => (a.sortDate?.getTime() || 0) - (b.sortDate?.getTime() || 0));
       const paid = chRows.filter(r => r.bucket === 'paid')
         .sort((a, b) => (b.sortDate?.getTime() || 0) - (a.sortDate?.getTime() || 0));
-      const bankIssues = engine.unmatchedBank.filter(t => t.channel === ch && t.monthKey === activeMonth);
+      let bankIssues = engine.unmatchedBank.filter(t => t.channel === ch);
+      if (viewMode === 'today') {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        bankIssues = bankIssues.filter(t => new Date(t.date) >= today);
+      } else if (viewMode === 'range' && dateRange) {
+        bankIssues = bankIssues.filter(t => {
+          const tDate = new Date(t.date);
+          return tDate >= dateRange.start && tDate <= dateRange.end;
+        });
+      } else {
+        bankIssues = bankIssues.filter(t => t.monthKey === activeMonth);
+      }
       const sumPaid = Math.round(paid.reduce((s, r) => s + (r.channelPaid || 0), 0) * 100) / 100;
       return {
         channel: ch, issues, onway, paid, bankIssues,
@@ -83,21 +123,21 @@ export default function ReconView({ engine, toolbar, emptyMessage, exportPrefix 
         commissionDue: Math.round(chRows.reduce((s, r) => s + r.commissionDue, 0) * 100) / 100,
       };
     });
-  }, [engine, activeMonth]);
+  }, [engine, activeMonth, viewMode, getActiveRows]);
 
   const exportCsv = () => {
     if (!engine) return;
-    const monthRows = engine.rows.filter(r => r.monthKey === activeMonth && r.bucket !== 'hidden');
     const h = ['Channel', 'Status', 'Payout date', 'Bank date', 'Code', 'Property', 'Check-out', 'Channel paid', 'Avantio expected', 'Diff', 'Note'];
-    const rows = monthRows.map(r => [
+    const rows = getActiveRows.map(r => [
       r.channel, r.label, r.payoutDate, r.bankDate, r.code, r.property, r.checkout,
       r.channelPaid != null ? r.channelPaid.toFixed(2) : '',
       r.expected != null ? r.expected.toFixed(2) : '',
       r.diff != null ? r.diff.toFixed(2) : '',
       r.note,
     ]);
+    const suffix = viewMode === 'today' ? '_today' : viewMode === 'range' && dateRange ? `_${dateRange.start.toISOString().slice(0, 10)}_to_${dateRange.end.toISOString().slice(0, 10)}` : `_${activeMonth}`;
     dlCsv([h.map(escCsv).join(','), ...rows.map(rr => rr.map(escCsv).join(','))].join('\n'),
-      `${exportPrefix}_${activeMonth}.csv`);
+      `${exportPrefix}${suffix}.csv`);
   };
 
   const rowLine = (r: ReconRow, i: number) => {
@@ -120,13 +160,40 @@ export default function ReconView({ engine, toolbar, emptyMessage, exportPrefix 
 
   return (
     <div>
-      {/* ── TOP BAR: toolbar + months + export ── */}
+      {/* ── TOP BAR: toolbar + view mode + months + export ── */}
       <div style={{ ...sCard, padding: '12px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         {toolbar}
         {engine && toolbar && <div style={{ width: 1, height: 22, background: C.border, margin: '0 6px' }} />}
-        {availableMonths.map(m => (
+        
+        {/* View mode selector */}
+        {engine && (
+          <>
+            <button style={sPill(viewMode === 'today')} onClick={() => { setViewMode('today'); onViewModeChange?.('today'); }}>Today</button>
+            <button style={sPill(viewMode === 'month')} onClick={() => { setViewMode('month'); onViewModeChange?.('month'); }}>Month</button>
+            <button style={sPill(viewMode === 'range')} onClick={() => { setViewMode('range'); onViewModeChange?.('range'); }}>Range</button>
+            <div style={{ width: 1, height: 22, background: C.border, margin: '0 6px' }} />
+          </>
+        )}
+        
+        {/* Month pills (only show in month view) */}
+        {viewMode === 'month' && availableMonths.map(m => (
           <button key={m} style={sPill(m === activeMonth)} onClick={() => setSelectedMonth(m)}>{monthLabel(m)}</button>
         ))}
+        
+        {/* Date range inputs (only show in range view) */}
+        {viewMode === 'range' && (
+          <>
+            <input type="date" style={{ padding: '6px 8px', borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 12 }}
+              defaultValue={dateRange ? dateRange.start.toISOString().slice(0, 10) : ''}
+              onChange={(e) => { if (e.target.value && dateRange) { const d = new Date(e.target.value); setDateRange({ ...dateRange, start: d }); onDateRangeChange?.(d, dateRange.end); }}}
+            />
+            <span style={{ color: C.muted }}>to</span>
+            <input type="date" style={{ padding: '6px 8px', borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 12 }}
+              defaultValue={dateRange ? dateRange.end.toISOString().slice(0, 10) : ''}
+              onChange={(e) => { if (e.target.value && dateRange) { const d = new Date(e.target.value); setDateRange({ ...dateRange, end: d }); onDateRangeChange?.(dateRange.start, d); }}}
+            />
+          </>
+        )}
         {engine && (
           <button style={{ ...sBtn, marginLeft: 'auto', background: C.navy, color: '#fff' }} onClick={exportCsv}>&#8595; Export</button>
         )}
