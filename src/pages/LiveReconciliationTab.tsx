@@ -7,8 +7,7 @@ import {
 
 // ═══════════════════════════════════════════════════════════════════
 // src/pages/LiveReconciliationTab.tsx — LIVE reconciliation
-// Monitoring dashboard: what's happening now, what's due, what's broken.
-// No manual uploads needed once n8n is running.
+// Two views: reconciliation summary + bank transaction log
 // ═══════════════════════════════════════════════════════════════════
 
 const C = {
@@ -48,6 +47,7 @@ function isoFromMDY(s: string): string | null {
 }
 
 export default function LiveReconciliationTab({ bookings }: Props) {
+  const [tab, setTab] = useState<'recon' | 'bank'>('recon');
   const [window, setWindow] = useState<Window>('7d');
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState<string | null>(null);
@@ -56,6 +56,7 @@ export default function LiveReconciliationTab({ bookings }: Props) {
   const [showSetup, setShowSetup] = useState(false);
   const [setupMsg, setSetupMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ issues: false, received: false, due: false });
   const abRef = useRef<HTMLInputElement>(null);
 
   const [avantio, setAvantio] = useState<AvantioBooking[]>([]);
@@ -146,7 +147,8 @@ export default function LiveReconciliationTab({ bookings }: Props) {
   }, [windowDays]);
 
   const filteredBank = useMemo(() =>
-    bank.filter(t => t.dateObj && t.dateObj >= cutoff), [bank, cutoff]);
+    bank.filter(t => t.dateObj && t.dateObj >= cutoff).sort((a, b) => (b.dateObj?.getTime() || 0) - (a.dateObj?.getTime() || 0)), 
+    [bank, cutoff]);
 
   const filteredAirbnb = useMemo(() =>
     airbnbPayouts.filter(p => {
@@ -265,6 +267,16 @@ export default function LiveReconciliationTab({ bookings }: Props) {
     );
   };
 
+  const bankLine = (t: BankTx, i: number) => (
+    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 20px', borderBottom: `1px solid ${C.surface2}`, fontSize: 13 }}>
+      <span style={{ color: C.muted, fontSize: 12, width: 78 }}>{t.date}</span>
+      <span style={{ fontWeight: 500, color: C.navyDeep, flex: 1 }}>{t.name}</span>
+      <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: C.green, minWidth: 84, textAlign: 'right' }}>
+        {fmt(t.amount)}
+      </span>
+    </div>
+  );
+
   if (loading) return (
     <div style={{ ...sCard, padding: '48px 24px', textAlign: 'center', color: C.muted, fontSize: 13 }}>Loading…</div>
   );
@@ -278,11 +290,10 @@ export default function LiveReconciliationTab({ bookings }: Props) {
 
   return (
     <div>
-      {/* ── HEADER BAR ── */}
+      {/* ── TAB SELECTOR ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
-        {WINDOWS.map(w => (
-          <button key={w.key} style={sBtn(window === w.key)} onClick={() => setWindow(w.key)}>{w.label}</button>
-        ))}
+        <button style={sBtn(tab === 'recon')} onClick={() => setTab('recon')}>Reconciliation</button>
+        <button style={sBtn(tab === 'bank')} onClick={() => setTab('bank')}>Bank Transactions</button>
         <div style={{ flex: 1 }} />
         {lastRefresh && (
           <span style={{ fontSize: 11.5, color: C.dim }}>
@@ -312,62 +323,95 @@ export default function LiveReconciliationTab({ bookings }: Props) {
         </div>
       )}
 
-      {/* ── SUMMARY STRIP ── */}
-      {stats && (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-          <div style={{ ...sCard, flex: 1, padding: '16px 20px' }}>
-            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Received</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: C.green }}>{fmt0(stats.received)}</div>
+      {/* ── RECONCILIATION TAB ── */}
+      {tab === 'recon' && (
+        <>
+          {/* Window selector */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+            {WINDOWS.map(w => (
+              <button key={w.key} style={sBtn(window === w.key)} onClick={() => setWindow(w.key)}>{w.label}</button>
+            ))}
           </div>
-          <div style={{ ...sCard, flex: 1, padding: '16px 20px' }}>
-            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Due</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: C.navy }}>{fmt0(stats.due)}</div>
-          </div>
-          <div style={{ ...sCard, flex: 1, padding: '16px 20px' }}>
-            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Issues</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: stats.issues > 0 ? C.coral : C.green }}>
-              {stats.issues > 0 ? stats.issues : '✓'}
+
+          {/* Summary strip */}
+          {stats && (
+            <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+              <div style={{ ...sCard, flex: 1, padding: '16px 20px' }}>
+                <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Received</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: C.green }}>{fmt0(stats.received)}</div>
+              </div>
+              <div style={{ ...sCard, flex: 1, padding: '16px 20px' }}>
+                <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Due</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: C.navy }}>{fmt0(stats.due)}</div>
+              </div>
+              <div style={{ ...sCard, flex: 1, padding: '16px 20px' }}>
+                <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Issues</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: stats.issues > 0 ? C.coral : C.green }}>
+                  {stats.issues > 0 ? stats.issues : '✓'}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          )}
+
+          {/* Issues box */}
+          {allRows.issues.length > 0 && (
+            <div style={{ ...sCard, marginBottom: 20, borderLeft: `4px solid ${C.coral}` }}>
+              <div style={{ padding: '12px 20px', background: '#fef5f4', borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: C.coral, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => setCollapsed(c => ({ ...c, issues: !c.issues }))}>
+                <span>{collapsed.issues ? '▾' : '▸'}</span>
+                <span>⚠ {allRows.issues.length} issue{allRows.issues.length !== 1 ? 's' : ''} need attention</span>
+              </div>
+              {!collapsed.issues && allRows.issues.map((r, i) => rowLine(r, i))}
+            </div>
+          )}
+
+          {/* Received box */}
+          {allRows.received.length > 0 && (
+            <div style={{ ...sCard, marginBottom: 20 }}>
+              <div style={{ padding: '12px 20px', background: '#f5fdf9', borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: C.green, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => setCollapsed(c => ({ ...c, received: !c.received }))}>
+                <span>{collapsed.received ? '▾' : '▸'}</span>
+                <span>✓ Received — {fmt0(stats?.received || 0)} ({allRows.received.length} txs)</span>
+              </div>
+              {!collapsed.received && allRows.received.map((r, i) => rowLine(r, i))}
+            </div>
+          )}
+
+          {/* Due box */}
+          {allRows.due.length > 0 && (
+            <div style={{ ...sCard }}>
+              <div style={{ padding: '12px 20px', background: C.bluePale, borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: C.navy, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => setCollapsed(c => ({ ...c, due: !c.due }))}>
+                <span>{collapsed.due ? '▾' : '▸'}</span>
+                <span>→ Due — {fmt0(stats?.due || 0)} ({allRows.due.length} txs)</span>
+              </div>
+              {!collapsed.due && allRows.due.map((r, i) => rowLine(r, 1000 + i))}
+            </div>
+          )}
+
+          {/* No data */}
+          {!engine && (
+            <div style={{ ...sCard, padding: '48px 24px', textAlign: 'center' }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.navyDeep, marginBottom: 4 }}>No activity in this window</div>
+              <div style={{ color: C.dim, fontSize: 12.5 }}>Try widening the window, or check the n8n workflows are running.</div>
+            </div>
+          )}
+        </>
       )}
 
-      {/* ── ISSUES BOX ── */}
-      {allRows.issues.length > 0 && (
-        <div style={{ ...sCard, marginBottom: 20, borderLeft: `4px solid ${C.coral}` }}>
-          <div style={{ padding: '12px 20px', background: '#fef5f4', borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: C.coral, fontSize: 13 }}>
-            ⚠ {allRows.issues.length} issue{allRows.issues.length !== 1 ? 's' : ''} need attention
+      {/* ── BANK TRANSACTIONS TAB ── */}
+      {tab === 'bank' && (
+        <>
+          <div style={{ ...sCard }}>
+            <div style={{ padding: '12px 20px', background: C.bluePale, borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: C.navy, fontSize: 13 }}>
+              Most recent ({filteredBank.length} in {WINDOWS.find(w => w.key === window)?.label.toLowerCase()})
+            </div>
+            {filteredBank.length > 0 ? (
+              filteredBank.map((t, i) => bankLine(t, i))
+            ) : (
+              <div style={{ padding: '32px 20px', textAlign: 'center', color: C.muted, fontSize: 13 }}>
+                No bank transactions in this window
+              </div>
+            )}
           </div>
-          {allRows.issues.map((r, i) => rowLine(r, i))}
-        </div>
-      )}
-
-      {/* ── NO DATA ── */}
-      {!engine && (
-        <div style={{ ...sCard, padding: '48px 24px', textAlign: 'center' }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: C.navyDeep, marginBottom: 4 }}>No activity in this window</div>
-          <div style={{ color: C.dim, fontSize: 12.5 }}>Try widening the window, or check the n8n workflows are running.</div>
-        </div>
-      )}
-
-      {/* ── RECEIVED ── */}
-      {allRows.received.length > 0 && (
-        <div style={{ ...sCard, marginBottom: 20 }}>
-          <div style={{ padding: '12px 20px', background: '#f5fdf9', borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: C.green, fontSize: 13 }}>
-            ✓ Received — {fmt0(stats?.received || 0)} ({allRows.received.length} txs)
-          </div>
-          {allRows.received.map((r, i) => rowLine(r, i))}
-        </div>
-      )}
-
-      {/* ── DUE ── */}
-      {allRows.due.length > 0 && (
-        <div style={{ ...sCard }}>
-          <div style={{ padding: '12px 20px', background: C.bluePale, borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: C.navy, fontSize: 13 }}>
-            → Due — {fmt0(stats?.due || 0)} ({allRows.due.length} txs)
-          </div>
-          {allRows.due.map((r, i) => rowLine(r, 1000 + i))}
-        </div>
+        </>
       )}
     </div>
   );
