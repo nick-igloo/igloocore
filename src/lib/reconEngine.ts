@@ -174,7 +174,10 @@ export function parseAirbnbCsv(text: string): AirbnbPayout[] {
   let current: AirbnbPayout | null = null;
   for (const row of parsed.data) {
     const type = (row['Type'] || '').trim();
-    if (type === 'Payout' || type === 'Resolution Payout') {
+    if (type === 'Payout') {
+      // Only an exact 'Payout' row starts a new payout. 'Resolution Payout'
+      // is a line item WITHIN a payout (its 'Paid out' column is empty) —
+      // treating it as a header split payouts in two and stranded the items.
       if (current) payouts.push(current);
       current = {
         date: (row['Date'] || '').trim(),
@@ -182,7 +185,7 @@ export function parseAirbnbCsv(text: string): AirbnbPayout[] {
         amount: r2(cleanNum(row['Paid out'])),
         items: [], bankDate: null, bankMatched: false,
       };
-    } else if (current && ['Reservation', 'Resolution Adjustment', 'Pass Through Tot'].includes(type)) {
+    } else if (current && ['Reservation', 'Resolution Payout', 'Resolution Adjustment', 'Pass Through Tot'].includes(type)) {
       current.items.push({
         type,
         code: (row['Confirmation Code'] || '').trim(),
@@ -302,13 +305,16 @@ export function reconcile(
       continue;
     }
     for (const item of p.items) {
-      if (item.type === 'Resolution Adjustment') {
+      if (item.type === 'Resolution Adjustment' || item.type === 'Resolution Payout') {
+        // Resolutions aren't booking payments — never match them against
+        // Avantio expected values. They ride the payout's bank status.
         rows.push({
-          channel: 'Airbnb', monthKey: mk, sortDate: pd, bucket: 'paid', label: 'Resolution',
+          channel: 'Airbnb', monthKey: mk, sortDate: pd,
+          bucket: p.bankMatched ? 'paid' : 'onway', label: 'Resolution',
           payoutDate: pdDisplay, bankDate: p.bankDate || '',
           code: item.code, property: item.listing, checkout: '',
           channelPaid: item.amount, expected: null, diff: null, commissionDue: 0,
-          note: 'Resolution adjustment',
+          note: item.type === 'Resolution Payout' ? 'Resolution payout' : 'Resolution adjustment',
         });
         continue;
       }

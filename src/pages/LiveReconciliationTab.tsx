@@ -218,6 +218,14 @@ export default function LiveReconciliationTab({ bookings }: Props) {
     r.onload = async e => {
       try {
         const payouts = parseAirbnbCsv(e.target?.result as string);
+        // Integrity guard: every payout's items (incl. pass-through) must sum
+        // to its amount. A mismatch means Airbnb changed the CSV format or a
+        // row type we don't recognise — surface it loudly, don't import quietly.
+        const badSums = payouts.filter(p => {
+          if (!p.items.length) return p.amount !== 0;
+          const sum = p.items.reduce((s, i) => s + i.amount + i.passThrough, 0);
+          return Math.abs(sum - p.amount) > 0.02;
+        });
         let imported = 0;
         for (const p of payouts) {
           const payoutRow = {
@@ -242,7 +250,11 @@ export default function LiveReconciliationTab({ bookings }: Props) {
           }
           imported++;
         }
-        setSetupMsg(`${imported} payouts imported`);
+        setSetupMsg(
+          badSums.length
+            ? `${imported} payouts imported \u2014 \u26A0 ${badSums.length} with item sums that don't match the payout total (${badSums.map(p => `${p.date} \u00A3${p.amount.toFixed(2)}`).join(', ')}) \u2014 check for a new Airbnb row type`
+            : `${imported} payouts imported \u2014 all item sums verified \u2713`
+        );
       } catch (err: any) { setSetupMsg('Import failed: ' + (err?.message || String(err))); }
       setBusy(false);
       setRefreshKey(k => k + 1);
