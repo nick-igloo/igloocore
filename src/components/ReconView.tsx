@@ -21,7 +21,7 @@ const C = {
 const LABEL_STYLE: Record<string, { bg: string; fg: string }> = {
   'Paid': { bg: '#d8f0e5', fg: '#1a6e42' },
   'Resolution': { bg: C.surface2, fg: C.muted },
-  'In transit': { bg: C.bluePale, fg: C.navy },
+  'Pending': { bg: C.bluePale, fg: C.navy },
   'Due': { bg: C.bluePale, fg: C.navy },
   'Upcoming': { bg: C.surface2, fg: C.muted },
   'Overdue': { bg: '#fde0d8', fg: '#9a2a1a' },

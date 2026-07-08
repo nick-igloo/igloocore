@@ -17,6 +17,20 @@ const C = {
   border: '#d4e2ef', muted: '#5a7a9a', dim: '#9ab0c5',
 };
 
+const LABEL_STYLE: Record<string, { bg: string; fg: string }> = {
+  'Paid': { bg: '#d8f0e5', fg: '#1a6e42' },
+  'Resolution': { bg: '#ece9f7', fg: '#4a3d8f' },
+  'Pending': { bg: '#dcecfb', fg: '#1a4a7a' },
+  'Due': { bg: '#dcecfb', fg: '#1a4a7a' },
+  'Upcoming': { bg: '#eef1f5', fg: '#5a6b7d' },
+  'Overdue': { bg: '#fde0d8', fg: '#9a2a1a' },
+  'Not in bank': { bg: '#fde0d8', fg: '#9a2a1a' },
+  'Short-paid': { bg: '#fde0d8', fg: '#9a2a1a' },
+  'Overpaid': { bg: '#fdefd5', fg: '#7a4e10' },
+  'Unknown': { bg: '#fdefd5', fg: '#7a4e10' },
+  'Breakdown pending': { bg: '#dcecfb', fg: '#1a4a7a' },
+};
+
 const sCard: CSSProperties = {
   background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
   boxShadow: '0 1px 4px rgba(26,74,122,0.07)',
@@ -267,7 +281,7 @@ export default function LiveReconciliationTab({ bookings }: Props) {
     ) : null;
 
   const rowLine = (r: ReconRow, rid: string, indent: boolean) => {
-    const st = r.bucket === 'issue' ? { bg: '#fde0d8', fg: '#9a2a1a' } : { bg: '#d8f0e5', fg: '#1a6e42' };
+    const st = LABEL_STYLE[r.label] || (r.bucket === 'issue' ? { bg: '#fde0d8', fg: '#9a2a1a' } : { bg: '#d8f0e5', fg: '#1a6e42' });
     const amount = r.label === 'Short-paid' && r.diff != null ? r.diff : (r.channelPaid ?? r.expected ?? null);
     const isOpen = expanded === rid;
     const stay = r.checkin && r.checkout ? `${r.checkin} \u2192 ${r.checkout}` : (r.checkout || r.checkin || '');
@@ -327,14 +341,14 @@ export default function LiveReconciliationTab({ bookings }: Props) {
     }
     const out: ReactNode[] = [];
     groups.forEach((g, gi) => {
-      const showHeader = g.key !== null && g.rows.length > 1;
+      const showHeader = g.key !== null;
       if (showHeader) {
         const first = g.rows[0];
         const batchTotal = first.payoutAmount ?? r2(g.rows.reduce((s, r) => s + (r.channelPaid || 0), 0));
         out.push(
           <div key={`${keyPrefix}-h-${gi}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 20px', background: '#f0f4f9', borderBottom: `1px solid ${C.surface2}`, fontSize: 11.5, fontWeight: 700, color: C.navy }}>
             <span>{first.channel} payout {fmt(batchTotal)}</span>
-            <span style={{ fontWeight: 500, color: C.muted }}>· {g.rows.length} bookings</span>
+            <span style={{ fontWeight: 500, color: C.muted }}>· {g.rows.length} booking{g.rows.length === 1 ? '' : 's'}</span>
             {first.payoutDate && <span style={{ fontWeight: 500, color: C.muted }}>· sent {first.payoutDate}</span>}
             <span style={{ fontWeight: 600, color: first.bankDate ? C.green : C.coral }}>
               · {first.bankDate ? `landed in bank ${first.bankDate} ✓` : 'not in bank'}

@@ -52,7 +52,7 @@ export interface ReconRow {
   monthKey: string;
   sortDate: Date | null;
   bucket: Bucket;
-  label: string;                 // Paid / In transit / Due / Upcoming / Overdue / Short-paid / Overpaid / Unknown / Resolution
+  label: string;                 // Paid / Pending / Due / Upcoming / Overdue / Short-paid / Overpaid / Unknown / Resolution / Not in bank / Breakdown pending
   payoutDate: string;
   bankDate: string;
   code: string;
@@ -352,7 +352,7 @@ export function reconcile(
           bucket = 'issue'; label = 'Not in bank';
           note = `Payout ${fmt(p.amount)} sent ${pdDisplay}, not found in bank after ${staleDays} days`;
         } else {
-          bucket = 'onway'; label = 'In transit';
+          bucket = 'onway'; label = 'Pending';
           note = p.arriving ? `Arrives ${dmy(parseMDY(p.arriving), p.arriving)}` : 'Not yet in bank';
         }
       } else if (Math.abs(diff) < 0.02) { bucket = 'paid'; label = 'Paid'; }
@@ -458,7 +458,7 @@ export function reconcile(
     }
     let bucket: Bucket; let label: string;
     const extrasExplained = av.extras > 0 && Math.abs(diff + av.extras) < 0.02;
-    if (!r.bankMatched) { bucket = 'onway'; label = 'In transit'; note = ('Not yet in bank' + (note ? ' \u00B7 ' + note : '')); }
+    if (!r.bankMatched) { bucket = 'onway'; label = 'Pending'; note = ('Not yet in bank' + (note ? ' \u00B7 ' + note : '')); }
     else if (Math.abs(diff) < 0.02) { bucket = 'paid'; label = 'Paid'; }
     else if (extrasExplained) {
       bucket = 'paid'; label = 'Paid';
