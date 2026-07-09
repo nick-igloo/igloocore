@@ -17,6 +17,61 @@ const C = {
   border: '#d4e2ef', muted: '#5a7a9a', dim: '#9ab0c5',
 };
 
+
+// ── Celebration: confetti + cha-ching when a payout newly lands in the bank ──
+const SEEN_KEY = 'igloo_recon_seen_landed_v1';
+
+function chaChing() {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const ping = (freq: number, t0: number, dur: number, vol: number) => {
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = freq;
+      g.gain.setValueAtTime(0, ctx.currentTime + t0);
+      g.gain.linearRampToValueAtTime(vol, ctx.currentTime + t0 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t0 + dur);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(ctx.currentTime + t0); o.stop(ctx.currentTime + t0 + dur + 0.05);
+    };
+    // two-note till chime
+    ping(1318.5, 0, 0.5, 0.18);   // E6
+    ping(1760.0, 0.09, 0.7, 0.18); // A6
+  } catch { /* audio blocked before user gesture — confetti still fires */ }
+}
+
+function fireConfetti() {
+  const cv = document.createElement('canvas');
+  Object.assign(cv.style, { position: 'fixed', inset: '0', width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: '9999' });
+  cv.width = window.innerWidth; cv.height = window.innerHeight;
+  document.body.appendChild(cv);
+  const cx = cv.getContext('2d')!;
+  const COLORS = ['#2fbf71', '#1a4a7a', '#f4a825', '#e2574c', '#7c5cff', '#3aa7e0'];
+  const N = 160;
+  const parts = Array.from({ length: N }, () => ({
+    x: cv.width / 2 + (Math.random() - 0.5) * cv.width * 0.3,
+    y: cv.height * 0.35,
+    vx: (Math.random() - 0.5) * 14,
+    vy: -6 - Math.random() * 9,
+    w: 6 + Math.random() * 6, h: 8 + Math.random() * 8,
+    rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.3,
+    color: COLORS[Math.floor(Math.random() * COLORS.length)],
+  }));
+  const t0 = performance.now();
+  const tick = (t: number) => {
+    const el = (t - t0) / 1000;
+    cx.clearRect(0, 0, cv.width, cv.height);
+    for (const p of parts) {
+      p.vy += 0.25; p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.vx *= 0.99;
+      cx.save(); cx.translate(p.x, p.y); cx.rotate(p.rot);
+      cx.globalAlpha = Math.max(0, 1 - el / 3);
+      cx.fillStyle = p.color; cx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      cx.restore();
+    }
+    if (el < 3) requestAnimationFrame(tick); else cv.remove();
+  };
+  requestAnimationFrame(tick);
+}
+
 const LABEL_STYLE: Record<string, { bg: string; fg: string }> = {
   'Paid': { bg: '#d8f0e5', fg: '#1a6e42' },
   'Resolution': { bg: '#ece9f7', fg: '#4a3d8f' },
@@ -273,6 +328,37 @@ export default function LiveReconciliationTab({ bookings }: Props) {
     r.readAsText(file);
   }, []);
 
+
+  // Celebrate newly-landed payouts (confetti + cha-ching + toast)
+  const [celebrateMsg, setCelebrateMsg] = useState<string | null>(null);
+  useEffect(() => {
+    if (!engine) return;
+    const landed = new Map<string, { amount: number | null; date: string }>();
+    for (const r of engine.rows) {
+      if (r.payoutKey && r.bankDate) {
+        if (!landed.has(r.payoutKey)) landed.set(r.payoutKey, { amount: r.payoutAmount, date: r.bankDate });
+      }
+    }
+    let seen: string[] = [];
+    let first = false;
+    try {
+      const raw = localStorage.getItem(SEEN_KEY);
+      if (raw === null) first = true; else seen = JSON.parse(raw);
+    } catch { first = true; }
+    const seenSet = new Set(seen);
+    const fresh = [...landed.keys()].filter(k => !seenSet.has(k));
+    try { localStorage.setItem(SEEN_KEY, JSON.stringify([...landed.keys()])); } catch { /* ignore */ }
+    if (first || fresh.length === 0) return;
+    fireConfetti();
+    chaChing();
+    const total = fresh.reduce((s, k) => s + (landed.get(k)?.amount || 0), 0);
+    setCelebrateMsg(fresh.length === 1
+      ? `\u{1F389} ${fmt(total)} landed in the bank!`
+      : `\u{1F389} ${fresh.length} payouts landed \u2014 ${fmt(total)}!`);
+    const t = setTimeout(() => setCelebrateMsg(null), 6000);
+    return () => clearTimeout(t);
+  }, [engine]);
+
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const detailField = (label: string, value: string | null | undefined) =>
@@ -471,6 +557,12 @@ export default function LiveReconciliationTab({ bookings }: Props) {
                 <span>✓ Received — {fmt0(stats?.received || 0)} ({allRows.received.length} txs)</span>
               </div>
               {!collapsed.received && groupedRows(allRows.received, 'rcv')}
+            </div>
+          )}
+
+          {celebrateMsg && (
+            <div style={{ position: 'fixed', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 10000, background: '#1a6e42', color: '#fff', padding: '12px 22px', borderRadius: 12, fontWeight: 700, fontSize: 14, boxShadow: '0 6px 24px rgba(0,0,0,0.25)' }}>
+              {celebrateMsg}
             </div>
           )}
 
