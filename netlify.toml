@@ -1,0 +1,20 @@
+# Netlify configuration for igloocore
+# Build is auto-detected from this file; SPA routing lives in public/_redirects.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Security headers — cheap wins for any security review.
+# (No CSP yet: adding one untested risks silently breaking Supabase/storage
+# calls; tighten later as a deliberate exercise.)
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(self), microphone=(), geolocation=()"
