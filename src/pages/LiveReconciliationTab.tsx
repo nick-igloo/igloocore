@@ -706,7 +706,7 @@ export default function LiveReconciliationTab({ bookings }: Props) {
         <>
           <div style={{ ...sCard }}>
             <div style={{ padding: '12px 20px', background: C.bluePale, borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: C.navy, fontSize: 13 }}>
-              Most recent ({filteredBank.length} in {WINDOWS.find(w => w.key === window)?.label.toLowerCase()})
+              Most recent ({filteredBank.length} in last {windowDays} days)
             </div>
             {filteredBank.length > 0 ? (
               filteredBank.map((t, i) => bankLine(t, i))
