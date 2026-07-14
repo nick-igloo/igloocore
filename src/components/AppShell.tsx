@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { Outlet, NavLink, Link, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Calculator, FileSpreadsheet, FileText, Receipt,
-  Sparkles, ClipboardList, AlertTriangle, Users, ShieldCheck, Zap,
-  ClipboardCheck, TreePine, FileSearch, Home, FolderSync, Settings as SettingsIcon,
+  LayoutDashboard, Calculator, FileText, Receipt, ShieldCheck, Zap,
+  TreePine, Home, FolderSync, Settings as SettingsIcon,
   BarChart3, Menu, X,
 } from 'lucide-react';
 
@@ -19,18 +18,8 @@ const NAV = [
     group: 'Finance',
     items: [
       { to: '/booking-processor', label: 'Booking Processor', icon: Calculator },
-      { to: '/settlement-generator', label: 'Settlements', icon: FileSpreadsheet },
       { to: '/settlement-converter', label: 'Settlement Converter', icon: FileText },
       { to: '/expenses', label: 'Director Expenses', icon: Receipt },
-    ],
-  },
-  {
-    group: 'Operations',
-    items: [
-      { to: '/guest-ready', label: 'Guest Ready', icon: Sparkles },
-      { to: '/turnover/tasks', label: 'Turnover Tasks', icon: ClipboardList },
-      { to: '/turnover/issues', label: 'Turnover Issues', icon: AlertTriangle },
-      { to: '/cleaner-management', label: 'Cleaners', icon: Users },
     ],
   },
   {
@@ -38,8 +27,6 @@ const NAV = [
     items: [
       { to: '/daily-safety', label: 'Daily Checks', icon: ShieldCheck },
       { to: '/pat-testing', label: 'PAT Testing', icon: Zap },
-      { to: '/property-safety-check', label: 'Property Safety', icon: ClipboardCheck },
-      { to: '/stl-checks-import', label: 'STL Checks', icon: FileSearch },
       { to: '/woodland-safety', label: 'Woodland Safety', icon: TreePine },
     ],
   },
@@ -55,7 +42,6 @@ const NAV = [
     group: 'Reports',
     items: [
       { to: '/reports', label: 'Owner Reports', icon: FileText },
-      { to: '/executive', label: 'Executive Pulse', icon: BarChart3 },
     ],
   },
 ];

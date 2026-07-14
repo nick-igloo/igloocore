@@ -33,7 +33,6 @@ import BankSettingsModal from '../components/BankSettingsModal';
 import { AdminDashboard } from '../components/AdminDashboard';
 import { AdminReports } from '../components/AdminReports';
 import { DirectorAccess } from '../components/DirectorAccess';
-import { GuestReadyTasksTab } from '../components/GuestReadyTasksTab';
 import { ContractorsPanel } from '../components/ContractorsPanel';
 import OnboardingPage from './OnboardingPage';
 
@@ -131,7 +130,6 @@ export default function Settings() {
         {tab === 'guest_ready' && (
           <div className="space-y-6">
             <ContractorsPanel />
-            <GuestReadyTasksTab />
           </div>
         )}
         {tab === 'access' && <DirectorAccess />}
