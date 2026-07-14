@@ -12,9 +12,5 @@ http://safe.igloo.scot/* https://safe.igloo.scot/index.html 200!
 https://stl.igloo.scot/* https://stl.igloo.scot/index.html 200!
 http://stl.igloo.scot/* https://stl.igloo.scot/index.html 200!
 
-# Storage proxy to hide Supabase URLs
-/api/storage/public/* https://cjgepswuiypbmrfluhmv.supabase.co/storage/v1/object/public/:splat 200
-/api/storage/* https://cjgepswuiypbmrfluhmv.supabase.co/storage/v1/object/sign/:splat 200
-
 # SPA fallback for all other routes
 /* /index.html 200
