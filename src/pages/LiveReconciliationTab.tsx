@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef, CSSProperties, React
 import { supabase } from '../lib/supabase';
 import {
   BookingRecord, AvantioBooking, AirbnbPayout, AirbnbItem, BcomReservation, BankTx, ReconRow,
-  toAvantio, parseAirbnbCsv, parseAny, reconcile, r2, dmy, fmt, fmt0,
+  toAvantio, parseAirbnbCsv, parseAny, reconcile, r2, dmy, fmt, fmt0, monthLabel, escCsv, dlCsv,
 } from '../lib/reconEngine';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -97,12 +97,27 @@ const sBtn = (active = false): CSSProperties => ({
   fontFamily: "'Outfit', sans-serif", display: 'inline-flex', alignItems: 'center', gap: 6,
 });
 
-type Window = '7d' | '30d' | '90d';
-const WINDOWS: { key: Window; label: string; days: number }[] = [
-  { key: '7d', label: 'Last 7 days', days: 7 },
-  { key: '30d', label: 'Last 30 days', days: 30 },
-  { key: '90d', label: 'Last 90 days', days: 90 },
-];
+function thisMonthKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+function shiftMonth(key: string, delta: number): string {
+  const [y, m] = key.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+// A booking belongs to the month it CHECKS OUT; payout-level rows
+// (no stay dates) belong to their payout month.
+function rowMonthKey(r: ReconRow): string {
+  const iso = isoFromDMY(r.checkout);
+  if (iso) return iso.slice(0, 7);
+  return r.sortDate ? `${r.sortDate.getFullYear()}-${String(r.sortDate.getMonth() + 1).padStart(2, '0')}` : '';
+}
+// Month in which payment lands (bank date if landed, else payout date)
+function rowPayMonthKey(r: ReconRow): string | null {
+  const iso = isoFromDMY(r.bankDate) || isoFromDMY(r.payoutDate);
+  return iso ? iso.slice(0, 7) : null;
+}
 
 interface Props { bookings: BookingRecord[]; }
 
@@ -117,7 +132,7 @@ function isoFromMDY(s: string): string | null {
 
 export default function LiveReconciliationTab({ bookings }: Props) {
   const [tab, setTab] = useState<'recon' | 'bank'>('recon');
-  const [window, setWindow] = useState<Window>('7d');
+  const [monthKey, setMonthKey] = useState<string>(thisMonthKey());
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -125,7 +140,24 @@ export default function LiveReconciliationTab({ bookings }: Props) {
   const [showSetup, setShowSetup] = useState(false);
   const [setupMsg, setSetupMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ issues: false, received: false, transit: false, due: false });
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ issues: false, received: false, transit: false, due: false, nextMonth: false });
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [showDismissed, setShowDismissed] = useState(false);
+
+  useEffect(() => {
+    supabase.from('recon_dismissed').select('key').then(({ data }) => {
+      if (data) setDismissed(new Set(data.map((d: any) => d.key)));
+    });
+  }, [refreshKey]);
+
+  const dismissIssue = async (key: string) => {
+    setDismissed(prev => new Set(prev).add(key));
+    await supabase.from('recon_dismissed').insert({ key });
+  };
+  const restoreIssue = async (key: string) => {
+    setDismissed(prev => { const n = new Set(prev); n.delete(key); return n; });
+    await supabase.from('recon_dismissed').delete().eq('key', key);
+  };
   const abRef = useRef<HTMLInputElement>(null);
 
   const [avantio, setAvantio] = useState<AvantioBooking[]>([]);
@@ -207,7 +239,7 @@ export default function LiveReconciliationTab({ bookings }: Props) {
   }, [refreshKey]);
 
   // filter to selected time window
-  const windowDays = WINDOWS.find(w => w.key === window)?.days || 7;
+  const windowDays = 90;
   const cutoff = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - windowDays);
@@ -235,26 +267,35 @@ export default function LiveReconciliationTab({ bookings }: Props) {
   // separate issues from ok transactions; window applies to received/due.
   // Issues always show regardless of window — an unresolved problem doesn't
   // stop needing attention because it aged out of the last 7 days.
+  const dismissKeyOf = (r: ReconRow) =>
+    `${r.channel}|${r.code}|${r.label}|${r.channelPaid ?? ''}|${r.expected ?? ''}`;
+
   const allRows = useMemo(() => {
-    if (!engine) return { issues: [], received: [], transit: [], due: [] };
-    const rows = engine.rows.filter(r => r.bucket !== 'hidden');
-    const inWindow = (r: ReconRow) => r.sortDate !== null && r.sortDate >= cutoff;
+    if (!engine) return { issues: [], dismissedIssues: [], received: [], transit: [], due: [], nextMonth: [] };
+    const rows = engine.rows.filter(r => r.bucket !== 'hidden' && rowMonthKey(r) === monthKey);
+    const issuePri = (l: string) => l === 'Short-paid' ? 0 : l === 'Overdue' ? 1 : l === 'Overpaid' ? 2 : 3;
+    const issuesAll = rows.filter(r => r.bucket === 'issue').sort((a, b) => issuePri(a.label) - issuePri(b.label));
+    const nonIssue = rows.filter(r => r.bucket !== 'issue');
+    // stays in this month whose payment lands in a LATER month
+    const crossMonth = (r: ReconRow) => { const pm = rowPayMonthKey(r); return pm !== null && pm > monthKey; };
     return {
-      issues: rows.filter(r => r.bucket === 'issue').sort((a, b) => {
-        const p = (l: string) => l === 'Short-paid' ? 0 : l === 'Overdue' ? 1 : l === 'Overpaid' ? 2 : 3;
-        return p(a.label) - p(b.label);
-      }),
-      received: rows.filter(r => r.bucket === 'paid' && inWindow(r)).sort((a, b) => (b.sortDate?.getTime() || 0) - (a.sortDate?.getTime() || 0)),
-      transit: rows.filter(r => r.bucket === 'onway' && r.payoutKey !== null && inWindow(r)).sort((a, b) => (b.sortDate?.getTime() || 0) - (a.sortDate?.getTime() || 0)),
-      due: rows.filter(r => r.bucket === 'onway' && r.payoutKey === null && inWindow(r)).sort((a, b) => (a.sortDate?.getTime() || 0) - (b.sortDate?.getTime() || 0)),
+      issues: issuesAll.filter(r => !dismissed.has(dismissKeyOf(r))),
+      dismissedIssues: issuesAll.filter(r => dismissed.has(dismissKeyOf(r))),
+      nextMonth: nonIssue.filter(crossMonth).sort((a, b) => (b.sortDate?.getTime() || 0) - (a.sortDate?.getTime() || 0)),
+      received: nonIssue.filter(r => r.bucket === 'paid' && !crossMonth(r)).sort((a, b) => (b.sortDate?.getTime() || 0) - (a.sortDate?.getTime() || 0)),
+      transit: nonIssue.filter(r => r.bucket === 'onway' && r.payoutKey !== null && !crossMonth(r)).sort((a, b) => (b.sortDate?.getTime() || 0) - (a.sortDate?.getTime() || 0)),
+      due: nonIssue.filter(r => r.bucket === 'onway' && r.payoutKey === null && !crossMonth(r)).sort((a, b) => (a.sortDate?.getTime() || 0) - (b.sortDate?.getTime() || 0)),
     };
-  }, [engine, cutoff]);
+  }, [engine, monthKey, dismissed]);
 
   const stats = useMemo(() => {
     if (!engine) return null;
-    const received = allRows.received.reduce((s, r) => s + (r.channelPaid || 0), 0);
-    const transit = allRows.transit.reduce((s, r) => s + (r.channelPaid ?? r.expected ?? 0), 0);
-    const due = allRows.due.reduce((s, r) => s + (r.channelPaid ?? r.expected ?? 0), 0);
+    const amt = (r: ReconRow) => r.channelPaid ?? r.expected ?? 0;
+    const received = allRows.received.reduce((s, r) => s + (r.channelPaid || 0), 0)
+      + allRows.nextMonth.filter(r => r.bucket === 'paid').reduce((s, r) => s + (r.channelPaid || 0), 0);
+    const transit = allRows.transit.reduce((s, r) => s + amt(r), 0);
+    const due = allRows.due.reduce((s, r) => s + amt(r), 0)
+      + allRows.nextMonth.filter(r => r.bucket !== 'paid').reduce((s, r) => s + amt(r), 0);
     return {
       issues: allRows.issues.length,
       received: r2(received),
@@ -318,8 +359,8 @@ export default function LiveReconciliationTab({ bookings }: Props) {
         }
         setSetupMsg(
           badSums.length
-            ? `${imported} payouts imported \u2014 \u26A0 ${badSums.length} with item sums that don't match the payout total (${badSums.map(p => `${p.date} \u00A3${p.amount.toFixed(2)}`).join(', ')}) \u2014 check for a new Airbnb row type`
-            : `${imported} payouts imported \u2014 all item sums verified ✓`
+            ? `${imported} payouts imported — \u26A0 ${badSums.length} with item sums that don't match the payout total (${badSums.map(p => `${p.date} \u00A3${p.amount.toFixed(2)}`).join(', ')}) — check for a new Airbnb row type`
+            : `${imported} payouts imported — all item sums verified ✓`
         );
       } catch (err: any) { setSetupMsg('Import failed: ' + (err?.message || String(err))); }
       setBusy(false);
@@ -354,12 +395,37 @@ export default function LiveReconciliationTab({ bookings }: Props) {
     const total = fresh.reduce((s, k) => s + (landed.get(k)?.amount || 0), 0);
     setCelebrateMsg(fresh.length === 1
       ? `\u{1F389} ${fmt(total)} landed in the bank!`
-      : `\u{1F389} ${fresh.length} payouts landed \u2014 ${fmt(total)}!`);
+      : `\u{1F389} ${fresh.length} payouts landed — ${fmt(total)}!`);
     const t = setTimeout(() => setCelebrateMsg(null), 6000);
     return () => clearTimeout(t);
   }, [engine]);
 
   const [expanded, setExpanded] = useState<string | null>(null);
+
+
+  const downloadMonthCsv = () => {
+    const rows = [...allRows.received, ...allRows.transit, ...allRows.due, ...allRows.nextMonth, ...allRows.issues, ...allRows.dismissedIssues];
+    const header = ['Channel', 'Status', 'Property', 'Code', 'Check-in', 'Check-out', 'Payout sent', 'Landed in bank', 'Channel paid', 'Expected (Avantio)', 'Difference', 'Commission due', 'Note'];
+    const lines = [header.map(escCsv).join(',')];
+    for (const r of rows) {
+      lines.push([
+        r.channel, r.label + (dismissed.has(dismissKeyOf(r)) ? ' (resolved)' : ''), r.property, r.code,
+        r.checkin, r.checkout, r.payoutDate, r.bankDate,
+        r.channelPaid ?? '', r.expected ?? '', r.diff ?? '', r.commissionDue || '', r.note,
+      ].map(escCsv).join(','));
+    }
+    lines.push('');
+    lines.push(['Channel', 'Received', 'Outstanding'].map(escCsv).join(','));
+    for (const ch of ['Airbnb', 'Booking.com'] as const) {
+      const recd = rows.filter(r => r.channel === ch && r.bucket === 'paid').reduce((s, r) => s + (r.channelPaid || 0), 0);
+      const out = rows.filter(r => r.channel === ch && r.bucket === 'onway').reduce((s, r) => s + (r.channelPaid ?? r.expected ?? 0), 0);
+      lines.push([ch, r2(recd).toFixed(2), r2(out).toFixed(2)].map(escCsv).join(','));
+    }
+    const recdT = rows.filter(r => r.bucket === 'paid').reduce((s, r) => s + (r.channelPaid || 0), 0);
+    const outT = rows.filter(r => r.bucket === 'onway').reduce((s, r) => s + (r.channelPaid ?? r.expected ?? 0), 0);
+    lines.push(['TOTAL', r2(recdT).toFixed(2), r2(outT).toFixed(2)].map(escCsv).join(','));
+    dlCsv(lines.join('\n'), `igloo-recon-${monthKey}.csv`);
+  };
 
   const detailField = (label: string, value: string | null | undefined) =>
     value ? (
@@ -408,6 +474,19 @@ export default function LiveReconciliationTab({ bookings }: Props) {
               <div style={{ gridColumn: '1 / -1' }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: 0.4 }}>Status</div>
                 <div style={{ fontSize: 12.5, color: C.navyDeep, marginTop: 1 }}>{r.note}</div>
+              </div>
+            )}
+            {r.bucket === 'issue' && (
+              <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
+                {dismissed.has(dismissKeyOf(r)) ? (
+                  <button style={{ ...sBtn(false), fontSize: 12 }} onClick={(e) => { e.stopPropagation(); restoreIssue(dismissKeyOf(r)); }}>
+                    ↩ Restore issue
+                  </button>
+                ) : (
+                  <button style={{ ...sBtn(false), fontSize: 12, color: '#1a6e42', borderColor: '#1a6e42' }} onClick={(e) => { e.stopPropagation(); dismissIssue(dismissKeyOf(r)); }}>
+                    ✓ Mark resolved — sorted in Avantio
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -511,11 +590,16 @@ export default function LiveReconciliationTab({ bookings }: Props) {
       {/* ── RECONCILIATION TAB ── */}
       {tab === 'recon' && (
         <>
-          {/* Window selector */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-            {WINDOWS.map(w => (
-              <button key={w.key} style={sBtn(window === w.key)} onClick={() => setWindow(w.key)}>{w.label}</button>
-            ))}
+          {/* Month selector — the report is a ledger of the month's DEPARTURES */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button style={sBtn(false)} onClick={() => setMonthKey(m => shiftMonth(m, -1))}>{'‹'}</button>
+            <div style={{ fontWeight: 800, fontSize: 16, color: C.navyDeep, minWidth: 150, textAlign: 'center' }}>{monthLabel(monthKey)}</div>
+            <button style={sBtn(false)} onClick={() => setMonthKey(m => shiftMonth(m, 1))}>{'›'}</button>
+            {monthKey !== thisMonthKey() && (
+              <button style={sBtn(false)} onClick={() => setMonthKey(thisMonthKey())}>This month</button>
+            )}
+            <div style={{ flex: 1 }} />
+            <button style={sBtn(false)} onClick={downloadMonthCsv}>{'⤓'} Download {monthLabel(monthKey)} CSV</button>
           </div>
 
           {/* Summary strip */}
@@ -546,6 +630,14 @@ export default function LiveReconciliationTab({ bookings }: Props) {
                 <span>⚠ {allRows.issues.length} issue{allRows.issues.length !== 1 ? 's' : ''} need attention</span>
               </div>
               {!collapsed.issues && groupedRows(allRows.issues, 'iss')}
+              {!collapsed.issues && allRows.dismissedIssues.length > 0 && (
+                <div style={{ padding: '8px 20px', fontSize: 12, color: C.muted, borderTop: `1px solid ${C.surface2}` }}>
+                  <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setShowDismissed(s => !s)}>
+                    {allRows.dismissedIssues.length} resolved {showDismissed ? '— hide' : '— show'}
+                  </span>
+                </div>
+              )}
+              {!collapsed.issues && showDismissed && groupedRows(allRows.dismissedIssues, 'dis')}
             </div>
           )}
 
@@ -563,6 +655,17 @@ export default function LiveReconciliationTab({ bookings }: Props) {
           {celebrateMsg && (
             <div style={{ position: 'fixed', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 10000, background: '#1a6e42', color: '#fff', padding: '12px 22px', borderRadius: 12, fontWeight: 700, fontSize: 14, boxShadow: '0 6px 24px rgba(0,0,0,0.25)' }}>
               {celebrateMsg}
+            </div>
+          )}
+
+          {/* Pays next month box */}
+          {allRows.nextMonth.length > 0 && (
+            <div style={{ ...sCard }}>
+              <div style={{ padding: '12px 20px', background: '#f2edfb', borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: '#4a3d8f', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => setCollapsed(c => ({ ...c, nextMonth: !c.nextMonth }))}>
+                <span>{collapsed.nextMonth ? '▾' : '▸'}</span>
+                <span>↪ {monthLabel(monthKey)} stays paying in {monthLabel(shiftMonth(monthKey, 1))} — {fmt0(r2(allRows.nextMonth.reduce((s, r) => s + (r.channelPaid ?? r.expected ?? 0), 0)))} ({allRows.nextMonth.length} txs)</span>
+              </div>
+              {!collapsed.nextMonth && groupedRows(allRows.nextMonth, 'nxt')}
             </div>
           )}
 
