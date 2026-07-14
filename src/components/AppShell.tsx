@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet, NavLink, Link, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Calculator, FileText, Receipt, ShieldCheck, Zap,
+  LayoutDashboard, Calculator, Activity, FileText, Receipt, ShieldCheck, Zap,
   TreePine, Home, FolderSync, Settings as SettingsIcon,
   BarChart3, Menu, X,
 } from 'lucide-react';
@@ -18,6 +18,7 @@ const NAV = [
     group: 'Finance',
     items: [
       { to: '/booking-processor', label: 'Booking Processor', icon: Calculator },
+      { to: '/live-reconciliation', label: 'Live Reconciliation', icon: Activity },
       { to: '/settlement-converter', label: 'Settlement Converter', icon: FileText },
       { to: '/expenses', label: 'Director Expenses', icon: Receipt },
     ],

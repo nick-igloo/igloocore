@@ -1,5 +1,5 @@
 import * as Icons from 'lucide-react';
-import { ClipboardList, FileText, ReceiptText, Zap, Sparkles, Users, AlertOctagon, Settings, Wallet, HardDrive } from 'lucide-react';
+import { ClipboardList, FileText, Zap, Settings, Wallet, HardDrive } from 'lucide-react';
 import type { ComponentType } from 'react';
 
 export type CardColor = 'emerald' | 'blue' | 'amber' | 'orange' | 'teal' | 'red';
@@ -26,6 +26,15 @@ export const quickAccessCards: QuickAccessCard[] = [
     url: '/booking-processor',
   },
   {
+    id: 'live-reconciliation',
+    name: 'Live Reconciliation',
+    description: 'Month-by-month ledger of Airbnb and Booking.com payouts matched live against the bank feed',
+    icon: Icons.Activity,
+    color: 'emerald',
+    category: 'Finance',
+    url: '/live-reconciliation',
+  },
+  {
     id: 'owner-reports',
     name: 'Owner Property Reports',
     description: 'Generate booking reports and letters for owners',
@@ -42,15 +51,6 @@ export const quickAccessCards: QuickAccessCard[] = [
     color: 'blue',
     category: 'Finance',
     url: '/settlement-converter',
-  },
-  {
-    id: 'settlement-generator',
-    name: 'Settlement Generator',
-    description: 'Upload booking CSVs and generate owner settlement statements with commission breakdown',
-    icon: ReceiptText,
-    color: 'orange',
-    category: 'Finance',
-    url: '/settlement-generator',
   },
   {
     id: 'pat-testing',
@@ -71,33 +71,6 @@ export const quickAccessCards: QuickAccessCard[] = [
     url: '/daily-safety',
   },
   {
-    id: 'turnover',
-    name: 'Guest Ready',
-    description: 'Mobile hub for cleaners and directors: safety checks, clean, welcome pack, tasks and issues — all in one place',
-    icon: Sparkles,
-    color: 'emerald',
-    category: 'Operations',
-    url: '/guest-ready',
-  },
-  {
-    id: 'turnover-tasks',
-    name: 'Tasks',
-    description: 'Open tasks across properties — assign to cleaners, set due dates and complete with photo proof',
-    icon: ClipboardList,
-    color: 'teal',
-    category: 'Operations',
-    url: '/turnover/tasks',
-  },
-  {
-    id: 'turnover-issues',
-    name: 'Issues',
-    description: 'Report faults with photos, log contractor status, email owner, mark resolved',
-    icon: AlertOctagon,
-    color: 'red',
-    category: 'Operations',
-    url: '/turnover/issues',
-  },
-  {
     id: 'director-expenses',
     name: 'Director Expenses',
     description: 'Log spend on the go, attach receipt photos, export a monthly CSV for bookkeeping',
@@ -105,15 +78,6 @@ export const quickAccessCards: QuickAccessCard[] = [
     color: 'emerald',
     category: 'Finance',
     url: '/expenses',
-  },
-  {
-    id: 'cleaner-management',
-    name: 'Cleaner Management',
-    description: 'Add cleaners and assign properties they are responsible for',
-    icon: Users,
-    color: 'blue',
-    category: 'Team',
-    url: '/cleaner-management',
   },
   {
     id: 'drive-sync',
