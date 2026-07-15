@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Loader2, Mail, Lock, Wand2, CheckCircle2 } from 'lucide-react';
+import { IglooLogo } from './IglooLogo';
 
 const ADMIN_EMAILS = ['nick@igloo.scot', 'erin@igloo.scot'];
 
@@ -73,10 +74,10 @@ export const AdminAuth: React.FC<AdminAuthProps> = ({ onAuthenticated }) => {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4" style={{ background: 'linear-gradient(170deg, #0d2850 0%, #1a4a7a 62%, #2e7cc7 130%)' }}>
       <div className="w-full max-w-md">
-        {/* igloo wordmark */}
-        <div className="text-center mb-7 select-none">
-          <div className="text-white font-bold tracking-tight" style={{ fontSize: 44, lineHeight: 1 }}>igloo</div>
-          <div className="mt-2 text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)', letterSpacing: 0.3 }}>Director Portal</div>
+        {/* igloo logo */}
+        <div className="text-center mb-7 select-none" style={{ color: '#ffffff' }}>
+          <IglooLogo width={190} />
+          <div className="mt-1 text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)', letterSpacing: 0.3 }}>Director Portal</div>
         </div>
 
         <div className="bg-white p-8" style={{ borderRadius: 14, boxShadow: '0 18px 50px rgba(5,20,45,0.45)' }}>
