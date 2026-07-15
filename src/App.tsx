@@ -13,6 +13,7 @@ const DocumentsPage = lazy(() => import('./pages/DocumentsPage'));
 const SafetyDocumentsPage = lazy(() => import('./pages/SafetyDocumentsPage'));
 const BookingProcessor = lazy(() => import('./pages/BookingProcessor'));
 const LiveReconciliation = lazy(() => import('./pages/LiveReconciliation'));
+const PropertySafetyPage = lazy(() => import('./pages/PropertySafetyPage'));
 const SettlementConverter = lazy(() => import('./pages/SettlementConverter'));
 const PATTestingTool = lazy(() => import('./pages/PATTestingTool'));
 const DailySafetyChecks = lazy(() => import('./pages/DailySafetyChecks'));
@@ -167,6 +168,7 @@ function App() {
         <Suspense fallback={<PageFallback />}>
           <Routes>
             <Route path="/" element={<SafetyDocumentsPage />} />
+            <Route path="/:propertySlug" element={<PropertySafetyPage />} />
             <Route path="*" element={<SafetyDocumentsPage />} />
           </Routes>
         </Suspense>
@@ -187,6 +189,7 @@ function App() {
           <Route path="/owner" element={<OwnerPortal />} />
           <Route path="/documents" element={<DocumentsPage />} />
           <Route path="/safety" element={<SafetyDocumentsPage />} />
+          <Route path="/safety/:propertySlug" element={<PropertySafetyPage />} />
           <Route element={<RequireAdmin />}>
             <Route element={<AppShell />}>
               <Route path="/booking-processor" element={<BookingProcessor />} />
