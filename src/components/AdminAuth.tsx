@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, Mail, Lock, Shield, Wand2, CheckCircle2 } from 'lucide-react';
+import { Loader2, Mail, Lock, Wand2, CheckCircle2 } from 'lucide-react';
 
 const ADMIN_EMAILS = ['nick@igloo.scot', 'erin@igloo.scot'];
 
@@ -71,33 +71,29 @@ export const AdminAuth: React.FC<AdminAuthProps> = ({ onAuthenticated }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4" style={{ background: 'linear-gradient(170deg, #0d2850 0%, #1a4a7a 62%, #2e7cc7 130%)' }}>
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-              <Shield className="w-8 h-8 text-blue-600" />
-            </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Director Portal</h1>
-            <p className="text-gray-500 text-sm">Administrator access only</p>
-          </div>
+        {/* igloo wordmark */}
+        <div className="text-center mb-7 select-none">
+          <div className="text-white font-bold tracking-tight" style={{ fontSize: 44, lineHeight: 1 }}>igloo</div>
+          <div className="mt-2 text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)', letterSpacing: 0.3 }}>Director Portal</div>
+        </div>
 
-          <div className="grid grid-cols-2 gap-1 mb-6 p-1 bg-slate-100 rounded-lg">
+        <div className="bg-white p-8" style={{ borderRadius: 14, boxShadow: '0 18px 50px rgba(5,20,45,0.45)' }}>
+          <div className="grid grid-cols-2 gap-1 mb-6 p-1 rounded-lg" style={{ background: '#f0f4f9' }}>
             <button
               type="button"
               onClick={() => { setMode('magic'); setError(null); setMagicSent(false); }}
-              className={`py-2 text-sm font-semibold rounded-md transition-colors ${
-                mode === 'magic' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
-              }`}
+              className="py-2 text-sm font-semibold rounded-md transition-colors"
+              style={mode === 'magic' ? { background: '#fff', color: '#1a4a7a', boxShadow: '0 1px 2px rgba(13,40,80,0.12)' } : { color: '#5a7a9a' }}
             >
               Magic link
             </button>
             <button
               type="button"
               onClick={() => { setMode('password'); setError(null); setMagicSent(false); }}
-              className={`py-2 text-sm font-semibold rounded-md transition-colors ${
-                mode === 'password' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
-              }`}
+              className="py-2 text-sm font-semibold rounded-md transition-colors"
+              style={mode === 'password' ? { background: '#fff', color: '#1a4a7a', boxShadow: '0 1px 2px rgba(13,40,80,0.12)' } : { color: '#5a7a9a' }}
             >
               Password
             </button>
@@ -107,16 +103,19 @@ export const AdminAuth: React.FC<AdminAuthProps> = ({ onAuthenticated }) => {
             <form onSubmit={handlePasswordSubmit} className="space-y-5">
               <EmailField email={email} setEmail={setEmail} />
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+                <label className="block text-sm font-medium mb-1.5" style={{ color: '#0d2850' }}>Password</label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: '#9ab0c5' }} />
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     placeholder="••••••••"
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+                    className="w-full pl-10 pr-4 py-3 rounded-lg transition-all text-sm focus:outline-none"
+                    style={{ border: '1px solid #d4e2ef' }}
+                    onFocus={(e) => { e.currentTarget.style.border = '1px solid #2e7cc7'; e.currentTarget.style.boxShadow = '0 0 0 3px #e8f1fa'; }}
+                    onBlur={(e) => { e.currentTarget.style.border = '1px solid #d4e2ef'; e.currentTarget.style.boxShadow = 'none'; }}
                   />
                 </div>
               </div>
@@ -126,7 +125,10 @@ export const AdminAuth: React.FC<AdminAuthProps> = ({ onAuthenticated }) => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                style={{ background: '#1a4a7a' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#0d2850')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = '#1a4a7a')}
               >
                 {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> Signing in...</> : 'Sign In'}
               </button>
@@ -134,15 +136,15 @@ export const AdminAuth: React.FC<AdminAuthProps> = ({ onAuthenticated }) => {
           ) : (
             <form onSubmit={handleMagicLink} className="space-y-5">
               <EmailField email={email} setEmail={setEmail} />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs" style={{ color: '#5a7a9a' }}>
                 We'll email you a one-time sign-in link. No password needed.
               </p>
 
               {error && <ErrorBanner message={error} />}
               {magicSent && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3 flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
-                  <div className="text-emerald-800 text-sm">
+                <div className="rounded-lg px-4 py-3 flex items-start gap-2" style={{ background: '#e9f6f0', border: '1px solid #bfe3d2' }}>
+                  <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#1a9860' }} />
+                  <div className="text-sm" style={{ color: '#14603d' }}>
                     Sign-in link sent to <span className="font-semibold">{email}</span>. Check your
                     inbox and click the link to continue.
                   </div>
@@ -152,12 +154,19 @@ export const AdminAuth: React.FC<AdminAuthProps> = ({ onAuthenticated }) => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                style={{ background: '#1a4a7a' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#0d2850')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = '#1a4a7a')}
               >
                 {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> Sending...</> : <><Wand2 className="w-4 h-4" /> Email me a sign-in link</>}
               </button>
             </form>
           )}
+        </div>
+
+        <div className="text-center mt-6 text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>
+          Igloo Highland Ltd · Aviemore, Cairngorms National Park
         </div>
       </div>
     </div>
@@ -167,16 +176,19 @@ export const AdminAuth: React.FC<AdminAuthProps> = ({ onAuthenticated }) => {
 function EmailField({ email, setEmail }: { email: string; setEmail: (v: string) => void }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
+      <label className="block text-sm font-medium mb-1.5" style={{ color: "#0d2850" }}>Email Address</label>
       <div className="relative">
-        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: "#9ab0c5" }} />
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
           placeholder="admin@example.com"
-          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+          className="w-full pl-10 pr-4 py-3 rounded-lg transition-all text-sm focus:outline-none"
+          style={{ border: "1px solid #d4e2ef" }}
+          onFocus={(e) => { e.currentTarget.style.border = "1px solid #2e7cc7"; e.currentTarget.style.boxShadow = "0 0 0 3px #e8f1fa"; }}
+          onBlur={(e) => { e.currentTarget.style.border = "1px solid #d4e2ef"; e.currentTarget.style.boxShadow = "none"; }}
         />
       </div>
     </div>
