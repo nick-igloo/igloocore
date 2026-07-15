@@ -66,7 +66,7 @@ export default function AppShell() {
           aria-label="Toggle menu">
           {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
-        <Link to="/" className="text-white hover:opacity-90 flex items-center" style={{ color: '#fff' }}><IglooLogo width={72} title="igloo — dashboard" /></Link>
+        <Link to="/" className="text-white hover:opacity-90 flex items-center" style={{ color: '#fff' }}><IglooLogo width={62} title="igloo — dashboard" /></Link>
         <span className="text-white/40 text-sm hidden sm:inline">/</span>
         <span className="text-white/70 text-sm font-medium hidden sm:inline">{current?.label || 'Dashboard'}</span>
         <div className="flex-1" />

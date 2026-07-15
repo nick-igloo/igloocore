@@ -9,6 +9,7 @@ export function IglooLogo({ width = 180, className, title = 'igloo' }: Props) {
       viewBox="0 0 1101.5 594.19"
       width={width}
       className={className}
+      style={{ display: 'block' }}
       role="img"
       aria-label={title}
       fill="currentColor"

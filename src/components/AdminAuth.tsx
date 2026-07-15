@@ -75,8 +75,8 @@ export const AdminAuth: React.FC<AdminAuthProps> = ({ onAuthenticated }) => {
     <div className="min-h-screen flex flex-col items-center justify-center px-4" style={{ background: 'linear-gradient(170deg, #0d2850 0%, #1a4a7a 62%, #2e7cc7 130%)' }}>
       <div className="w-full max-w-md">
         {/* igloo logo */}
-        <div className="text-center mb-7 select-none" style={{ color: '#ffffff' }}>
-          <IglooLogo width={190} />
+        <div className="mb-7 select-none flex flex-col items-center" style={{ color: '#ffffff' }}>
+          <IglooLogo width={150} />
           <div className="mt-1 text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)', letterSpacing: 0.3 }}>Director Portal</div>
         </div>
 
