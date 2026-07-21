@@ -350,8 +350,18 @@ export default function LiveReconciliationTab({ bookings }: Props) {
             payoutId = up.id;
           }
           if (p.items.length) {
+            // Airbnb can list the same booking code twice in one payout
+            // (split/altered reservations). Merge by code+type, summing
+            // amounts, or the upsert's conflict key silently drops a line.
+            const merged = new Map<string, { type: string; code: string; listing: string; amount: number; passThrough: number }>();
+            for (const i of p.items) {
+              const key = `${i.code}|${i.type}`;
+              const m = merged.get(key);
+              if (m) { m.amount = r2(m.amount + i.amount); m.passThrough = r2(m.passThrough + i.passThrough); }
+              else merged.set(key, { type: i.type, code: i.code, listing: i.listing, amount: i.amount, passThrough: i.passThrough });
+            }
             await supabase.from('recon_airbnb_payout_items').upsert(
-              p.items.map(i => ({ payout_id: payoutId, item_type: i.type, code: i.code, listing: i.listing, amount: r2(i.amount), pass_through: r2(i.passThrough) })),
+              [...merged.values()].map(i => ({ payout_id: payoutId, item_type: i.type, code: i.code, listing: i.listing, amount: r2(i.amount), pass_through: r2(i.passThrough) })),
               { onConflict: 'payout_id,code,item_type' }
             );
           }
