@@ -74,6 +74,14 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
     const created = parseDate(row['Date']);
     const checkIn = parseDate(row['Check-in date']);
     const checkOut = parseDate(row['Check-out date']);
+    // Report window: this is a departures-based revenue report. Only
+    // bookings checking out within [Jan compYear .. Dec targetYear] exist
+    // for its purposes — pulse, occupancy and revenue alike — making the
+    // stats invariant to however wide the source sheet's range grows.
+    if (!checkOut) continue;
+    const coYear = checkOut.getFullYear();
+    if (coYear < compYear || coYear > targetYear) continue;
+
     const nights = toNum(row['nights'] ?? row['Nights']);
     const totalVal = toNum(row['Booking total with tax']);
     const portalFee = toNum(row['Portal/Intermediary Commission: calculated commission']);
