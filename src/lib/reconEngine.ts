@@ -145,7 +145,7 @@ export function toAvantio(bookings: BookingRecord[]): AvantioBooking[] {
       if (portalRaw.includes('airbnb')) portal = 'airbnb';
       else if (portalRaw.includes('booking.com')) portal = 'booking.com';
       let code = bookingNumber;
-      const hm = bookingNumber.match(/HM[A-Z0-9]+/);
+      const hm = bookingNumber.match(/HM[A-Z0-9]{8}/);
       if (portal === 'airbnb' && hm) code = hm[0];
       else if (portal === 'booking.com') {
         const parts = bookingNumber.split('-');
@@ -153,7 +153,9 @@ export function toAvantio(bookings: BookingRecord[]): AvantioBooking[] {
       }
       const paid = cleanNum(resolve(b, 'Paid'));
       const commission = cleanNum(resolve(b, 'Portal/Intermediary Commission: calculated commission'));
-      const extras = cleanNum(resolve(b, 'Extras with VAT on top')) || cleanNum(resolve(b, 'Extras without VAT'));
+      const extras = resolve(b, 'Extras with VAT on top') !== ''
+        ? cleanNum(resolve(b, 'Extras with VAT on top'))
+        : cleanNum(resolve(b, 'Extras without VAT'));
       const checkout = resolve(b, 'Check-out date');
       const checkin = resolve(b, 'Check-in date');
       return {
