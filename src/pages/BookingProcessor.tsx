@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import Papa from 'papaparse';
 import JSZip from 'jszip';
 import {
@@ -148,6 +149,30 @@ function BookingProcessor() {
   const [configTab, setConfigTab] = useState('cleans');
   const [view, setView] = useState<'processor' | 'recon' | 'live'>('processor');
   const fileRef = useRef<HTMLInputElement>(null);
+  const [sotLoaded, setSotLoaded] = useState<null | number>(null);
+
+  // Single source of truth: on mount, pull the full Avantio rows synced by
+  // n8n (property_bookings_cache.raw carries the complete export row).
+  // A manually dropped CSV still overrides for ad-hoc analysis.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('property_bookings_cache')
+        .select('raw')
+        .not('raw', 'is', null);
+      if (cancelled || error || !data?.length) return;
+      const bookings = (data as any[]).map(d => d.raw as BookingRecord)
+        .filter(b => b && b['Booking number']);
+      if (!bookings.length) return;
+      setAll(bookings);
+      setFname('Synced from Avantio feed');
+      setSotLoaded(bookings.length);
+      const ms = getMonths(bookings);
+      if (ms.length) setMonth(ms[0]);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Config state
   const [cleanConfigs, setCleanConfigs] = useState<CleanConfigItem[]>(
