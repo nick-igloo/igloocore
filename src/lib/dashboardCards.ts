@@ -35,6 +35,15 @@ export const quickAccessCards: QuickAccessCard[] = [
     url: '/live-reconciliation',
   },
   {
+    id: 'director-stats',
+    name: 'Director Stats',
+    description: 'Live occupancy vs last-year pace, sales pulse, monthly performance and property breakdown',
+    icon: Icons.TrendingUp,
+    color: 'amber',
+    category: 'Reports',
+    url: '/stats',
+  },
+  {
     id: 'owner-reports',
     name: 'Owner Property Reports',
     description: 'Generate booking reports and letters for owners',

@@ -13,6 +13,7 @@ const DocumentsPage = lazy(() => import('./pages/DocumentsPage'));
 const SafetyDocumentsPage = lazy(() => import('./pages/SafetyDocumentsPage'));
 const BookingProcessor = lazy(() => import('./pages/BookingProcessor'));
 const LiveReconciliation = lazy(() => import('./pages/LiveReconciliation'));
+const DirectorStats = lazy(() => import('./pages/DirectorStats'));
 const PropertySafetyPage = lazy(() => import('./pages/PropertySafetyPage'));
 const SettlementConverter = lazy(() => import('./pages/SettlementConverter'));
 const PATTestingTool = lazy(() => import('./pages/PATTestingTool'));
@@ -127,6 +128,7 @@ function App() {
                 <Route path="/reports" element={<ReportApp />} />
                 <Route path="/booking-processor" element={<BookingProcessor />} />
                 <Route path="/live-reconciliation" element={<LiveReconciliation />} />
+                <Route path="/stats" element={<DirectorStats />} />
                 <Route path="/settlement-converter" element={<SettlementConverter />} />
                 <Route path="/pat-testing" element={<PATTestingTool />} />
                 <Route path="/daily-safety" element={<DailySafetyChecks />} />
@@ -194,6 +196,7 @@ function App() {
             <Route element={<AppShell />}>
               <Route path="/booking-processor" element={<BookingProcessor />} />
               <Route path="/live-reconciliation" element={<LiveReconciliation />} />
+                <Route path="/stats" element={<DirectorStats />} />
               <Route path="/settlement-converter" element={<SettlementConverter />} />
               <Route path="/pat-testing" element={<PATTestingTool />} />
               <Route path="/daily-safety" element={<DailySafetyChecks />} />

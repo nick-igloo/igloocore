@@ -2,7 +2,7 @@ import { IglooLogo } from './IglooLogo';
 import { useState } from 'react';
 import { Outlet, NavLink, Link, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Calculator, Activity, FileText, Receipt, ShieldCheck, Zap,
+  LayoutDashboard, Calculator, Activity, TrendingUp, FileText, Receipt, ShieldCheck, Zap,
   TreePine, Home, FolderSync, Settings as SettingsIcon,
   BarChart3, Menu, X,
 } from 'lucide-react';
@@ -44,6 +44,7 @@ const NAV = [
     group: 'Reports',
     items: [
       { to: '/reports', label: 'Owner Reports', icon: FileText },
+      { to: '/stats', label: 'Director Stats', icon: TrendingUp },
     ],
   },
 ];
