@@ -41,7 +41,17 @@ interface CleanerRecord {
   active: boolean;
 }
 
-export default function NewPropertyWizard() {
+interface NewPropertyWizardProps {
+  /** When true, renders without the full-page shell (sticky header, min-h-screen)
+   *  for embedding inside another page's content area, e.g. a Settings tab. */
+  embedded?: boolean;
+  /** Called instead of navigate() for in-app links when embedded, so the host
+   *  page can switch its own tab state rather than relying on a hash change
+   *  the host may not be listening for. */
+  onDone?: (target: 'properties') => void;
+}
+
+export default function NewPropertyWizard({ embedded = false, onDone }: NewPropertyWizardProps = {}) {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>('property');
   const [saving, setSaving] = useState(false);
@@ -282,67 +292,82 @@ export default function NewPropertyWizard() {
   };
 
   if (completed) {
+    const card = (
+      <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 shadow-lg p-8 text-center">
+        <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5">
+          <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900">Property onboarded</h2>
+        <p className="text-sm text-slate-500 mt-2">
+          <span className="font-semibold text-slate-700">{propName}</span> is now live across all systems — bookings, settlements, safety checks, and guest ready.
+        </p>
+        <div className="mt-6 flex flex-col gap-2">
+          <button
+            onClick={() => (embedded && onDone ? onDone('properties') : navigate('/settings#properties'))}
+            className="w-full px-4 py-3 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+          >
+            View in Settings
+          </button>
+          <button
+            onClick={() => {
+              setCompleted(false);
+              setStep('property');
+              setCreatedPropertyId(null);
+              setPropName('');
+              setPropNotes('');
+              setCleanPrice('');
+              setWelcomePackSize('small');
+              setMatchPatterns('');
+              setSpecialRule('');
+              setSelectedBankOwnerId('');
+              setSelectedPortalOwnerId('');
+              setSelectedCleanerId('');
+              setCleanerName('');
+              setNewBankMode(false);
+              setNewOwnerMode(false);
+            }}
+            className="w-full px-4 py-3 text-sm font-semibold text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
+          >
+            Add another property
+          </button>
+        </div>
+      </div>
+    );
+
+    if (embedded) {
+      return <div className="flex items-center justify-center py-16">{card}</div>;
+    }
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 shadow-lg p-8 text-center">
-          <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5">
-            <CheckCircle2 className="w-8 h-8 text-emerald-600" />
-          </div>
-          <h2 className="text-xl font-bold text-slate-900">Property onboarded</h2>
-          <p className="text-sm text-slate-500 mt-2">
-            <span className="font-semibold text-slate-700">{propName}</span> is now live across all systems — bookings, settlements, safety checks, and guest ready.
-          </p>
-          <div className="mt-6 flex flex-col gap-2">
-            <button
-              onClick={() => navigate('/settings#properties')}
-              className="w-full px-4 py-3 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
-            >
-              View in Settings
-            </button>
-            <button
-              onClick={() => {
-                setCompleted(false);
-                setStep('property');
-                setCreatedPropertyId(null);
-                setPropName('');
-                setPropNotes('');
-                setCleanPrice('');
-                setWelcomePackSize('small');
-                setMatchPatterns('');
-                setSpecialRule('');
-                setSelectedBankOwnerId('');
-                setSelectedPortalOwnerId('');
-                setSelectedCleanerId('');
-                setCleanerName('');
-                setNewBankMode(false);
-                setNewOwnerMode(false);
-              }}
-              className="w-full px-4 py-3 text-sm font-semibold text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
-            >
-              Add another property
-            </button>
-          </div>
-        </div>
+        {card}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-3">
-          <Link
-            to="/settings#setup"
-            className="text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg p-2 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-base font-bold text-slate-900 truncate">Onboard New Property</h1>
-            <p className="text-xs text-slate-500">Step {stepIndex + 1} of {STEPS.length}</p>
-          </div>
+    <div className={embedded ? '' : 'min-h-screen bg-slate-50'}>
+      {embedded ? (
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-1 pb-3">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+            Step {stepIndex + 1} of {STEPS.length}
+          </p>
         </div>
-      </header>
+      ) : (
+        <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-3">
+            <Link
+              to="/settings#setup"
+              className="text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg p-2 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Link>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-base font-bold text-slate-900 truncate">Onboard New Property</h1>
+              <p className="text-xs text-slate-500">Step {stepIndex + 1} of {STEPS.length}</p>
+            </div>
+          </div>
+        </header>
+      )}
 
       {/* Step indicators */}
       <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-6">

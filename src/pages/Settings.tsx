@@ -10,7 +10,6 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
-  ExternalLink,
   Search,
   Shield,
   PackagePlus,
@@ -29,6 +28,7 @@ import { OwnerManagement } from '../components/OwnerManagement';
 import BankSettingsModal from '../components/BankSettingsModal';
 import { DirectorAccess } from '../components/DirectorAccess';
 import OnboardingPage from './OnboardingPage';
+import NewPropertyWizard from './NewPropertyWizard';
 
 type TabKey =
   | 'properties'
@@ -135,7 +135,7 @@ export default function Settings() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {tab === 'properties' && <PropertiesTab />}
         {tab === 'owners' && <OwnerManagement />}
-        {tab === 'onboard' && <OnboardTab />}
+        {tab === 'onboard' && <NewPropertyWizard embedded onDone={setTab} />}
         {tab === 'bank' && <BankTab />}
         {tab === 'pricing' && <PricingTab />}
         {tab === 'access' && <DirectorAccess />}
@@ -392,19 +392,6 @@ function PropertiesTab() {
   );
 }
 
-// ─── Onboard Property Tab ────────────────────────────────────────────────────
-
-function OnboardTab() {
-  return (
-    <LinkOutCard
-      title="Onboard a new property"
-      description="Step-by-step wizard: property details, owner and bank info, welcome pack, and initial pricing — everything needed before the first booking lands."
-      href="/onboard-property"
-      cta="Start the wizard"
-    />
-  );
-}
-
 // ─── Bank Tab ────────────────────────────────────────────────────────────────
 
 function BankTab() {
@@ -541,22 +528,6 @@ function PricingTab() {
   );
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function LinkOutCard({ title, description, href, cta }: { title: string; description: string; href: string; cta: string }) {
-  return (
-    <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-      <h2 className="text-lg font-bold text-slate-900">{title}</h2>
-      <p className="text-sm text-slate-500 mt-1">{description}</p>
-      <Link
-        to={href}
-        className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-      >
-        <ExternalLink className="w-4 h-4" />
-        {cta}
-      </Link>
-    </section>
-  );
-}
 
 
