@@ -1,40 +1,20 @@
-// Director Stats — live from the single source of truth.
-// Computes the full Executive Pulse metric set (ported 1:1 from the
-// n8n dashboard workflow) directly from property_bookings_cache.raw,
-// so the numbers can never go stale behind a broken pipeline again.
+// Director Stats — faithful port of the original Executive Dashboard
+// (igloo-stats Bolt app) over the single source of truth. Same navy hero
+// with CountUp commission and ghost area chart, same pulse grid, same
+// monthly pacing bars with the dashed final-target goal line —
+// computed live from property_bookings_cache.raw instead of a pipeline.
 import { useEffect, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
+import {
+  TrendingUp, Building2, ArrowUp, ArrowDown, Ticket, RefreshCw,
+} from 'lucide-react';
+import { ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { supabase } from '../lib/supabase';
+import { CountUp } from '../components/CountUp';
 import { computeDirectorStats, DirectorStats as Stats } from '../lib/statsEngine';
-import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 
-const C = {
-  navyDeep: '#0d2850', navy: '#1a4a7a', blue: '#2e7cc7', bluePale: '#e8f1fa',
-  green: '#1a6e42', greenPale: '#d8f0e5', coral: '#c0392b', coralPale: '#fde0d8',
-  amber: '#9a6a10', amberPale: '#fdf8ec',
-  surface: '#ffffff', surface2: '#eef2f7', border: '#dde5ee',
-  muted: '#5a7a9a', dim: '#8aa0b5',
-};
-
-const gbp0 = (n: number) => '£' + Math.round(n).toLocaleString('en-GB');
-const pct = (n: number) => n.toFixed(1) + '%';
-
-const sCard: React.CSSProperties = {
-  background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`,
-  overflow: 'hidden', marginBottom: 16,
-};
-
-function StatusPill({ status }: { status: 'ahead' | 'behind' | 'neutral' }) {
-  const map = {
-    ahead: { bg: C.greenPale, fg: C.green, label: 'Ahead' },
-    behind: { bg: C.coralPale, fg: '#9a2a1a', label: 'Behind' },
-    neutral: { bg: C.surface2, fg: C.muted, label: '—' },
-  }[status];
-  return (
-    <span style={{ background: map.bg, color: map.fg, padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
-      {map.label}
-    </span>
-  );
-}
+const formatCurrency = (n: number) => '£' + Math.round(n).toLocaleString('en-GB');
+const formatNumber = (n: number) => n.toLocaleString('en-GB');
 
 export default function DirectorStats() {
   const [rows, setRows] = useState<Record<string, unknown>[] | null>(null);
@@ -45,7 +25,6 @@ export default function DirectorStats() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      // Paginate past Supabase's 1000-row default limit
       const all: Record<string, unknown>[] = [];
       const PAGE = 1000;
       for (let from = 0; ; from += PAGE) {
@@ -65,185 +44,251 @@ export default function DirectorStats() {
     return () => { cancelled = true; };
   }, [refreshKey]);
 
-  const stats: Stats | null = useMemo(() => (rows && rows.length ? computeDirectorStats(rows) : null), [rows]);
+  const stats: Stats | null = useMemo(
+    () => (rows && rows.length ? computeDirectorStats(rows) : null),
+    [rows],
+  );
 
   if (err) {
-    return <div style={{ padding: 32, color: '#9a2a1a' }}>Couldn't load bookings: {err}</div>;
+    return <div className="p-10 text-red-700">Couldn't load bookings: {err}</div>;
   }
   if (!rows) {
-    return <div style={{ padding: 32, color: C.muted }}>Loading bookings…</div>;
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center bg-white">
+        <div className="text-center">
+          <div className="inline-block w-16 h-16 border-4 border-[#003366] border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-[#003366] font-bold">Loading Dashboard...</p>
+        </div>
+      </div>
+    );
   }
   if (!stats) {
     return (
-      <div style={{ padding: 32, maxWidth: 640 }}>
-        <h1 style={{ color: C.navyDeep, fontSize: 22, fontWeight: 800, marginBottom: 8 }}>Director Stats</h1>
-        <p style={{ color: C.muted, fontSize: 14 }}>
-          No synced bookings yet. Stats compute live from the Avantio bookings feed — once the
-          source-of-truth sync has run, the full year view appears here automatically.
+      <div className="p-10 max-w-xl">
+        <h1 className="text-2xl font-bold text-[#003366] mb-2">Executive Dashboard</h1>
+        <p className="text-slate-500 text-sm">
+          No synced bookings yet — once the Avantio source-of-truth sync has run,
+          the full year view appears here automatically.
         </p>
       </div>
     );
   }
 
-  const pulses: { label: string; p: typeof stats.pulse24h }[] = [
-    { label: 'Last 24 hours', p: stats.pulse24h },
-    { label: 'Last 7 days', p: stats.pulse7d },
-    { label: 'Last 30 days', p: stats.pulse30d },
-  ];
+  const chartData = stats.performanceTable.map(r => ({ month: r.month, value: r.bookingValue }));
+  const heroCommission = stats.totalCommission;
+  const occCurrent = stats.occupancyCurrent;
+  const occPace = stats.occupancyPace;
+  const occDiff = occCurrent - occPace;
   const propsShown = showAllProps ? stats.propertyStats : stats.propertyStats.slice(0, 12);
-  const nowMonth = new Date().getMonth();
 
   return (
-    <div style={{ padding: '24px 28px', maxWidth: 1100 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 4 }}>
-        <h1 style={{ color: C.navyDeep, fontSize: 22, fontWeight: 800 }}>Director Stats</h1>
-        <span style={{ color: C.dim, fontSize: 12 }}>
-          {stats.targetYear} · live from the Avantio feed · {stats.bookingsProcessed.toLocaleString()} bookings
-        </span>
-        <div style={{ flex: 1 }} />
-        <button
-          onClick={() => { setRows(null); setRefreshKey(k => k + 1); }}
-          style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 14px', fontSize: 12.5, fontWeight: 600, color: C.navy, cursor: 'pointer' }}
-        >
-          ↻ Refresh
-        </button>
-      </div>
-
-      {/* Hero: the pacing story */}
-      <div style={{ ...sCard, padding: '20px 24px', display: 'flex', gap: 36, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            {stats.targetYear} occupancy
+    <div className="min-h-screen bg-white font-sans text-slate-900">
+      <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="sticky top-0 z-40 backdrop-blur-md bg-white/90 border-b border-slate-200 py-4 px-6">
+        <div className="max-w-7xl mx-auto flex items-end justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-[#003366]">Executive Dashboard</h1>
+            <p className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">
+              Live Pacing Analysis · {formatNumber(stats.bookingsProcessed)} bookings · straight from the Avantio feed
+            </p>
           </div>
-          <div style={{ fontSize: 40, fontWeight: 800, color: C.navyDeep, lineHeight: 1.05, fontVariantNumeric: 'tabular-nums' }}>
-            {pct(stats.occupancyCurrent)}
-          </div>
-        </div>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            {stats.compYear} pace at this date
-          </div>
-          <div style={{ fontSize: 28, fontWeight: 700, color: C.muted, lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}>
-            {pct(stats.occupancyPace)}
-          </div>
-        </div>
-        <StatusPill status={stats.occupancyStatus} />
-        <div style={{ flex: 1 }} />
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            {stats.targetYear} booking value · our commission
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: C.navyDeep, fontVariantNumeric: 'tabular-nums' }}>
-            {gbp0(stats.totalRevenue)} <span style={{ color: C.green }}>· {gbp0(stats.totalCommission)}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Sales pulse */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 16 }}>
-        {pulses.map(({ label, p }) => (
-          <div key={label} style={{ ...sCard, marginBottom: 0, padding: '16px 20px' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>{label}</div>
-            <div style={{ fontSize: 26, fontWeight: 800, color: C.navyDeep, fontVariantNumeric: 'tabular-nums' }}>
-              {p.count} <span style={{ fontSize: 13, fontWeight: 600, color: C.muted }}>bookings</span>
-            </div>
-            <div style={{ fontSize: 13, color: C.muted, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-              {gbp0(p.bookingValue)} value · <span style={{ color: C.green, fontWeight: 700 }}>{gbp0(p.ourCommission)} commission</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-
-      {/* Revenue + occupancy chart */}
-      <div style={{ ...sCard, padding: '18px 20px 6px' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
-          {stats.targetYear} monthly booking value (bars) and occupancy vs {stats.compYear} pace (lines)
-        </div>
-        <ResponsiveContainer width="100%" height={240}>
-          <ComposedChart data={stats.performanceTable.map(r => ({
-            m: r.month.slice(0, 3), value: Math.round(r.bookingValue),
-            occ: +r.occupancy.toFixed(1), pace: +r.pacingOcc.toFixed(1),
-          }))} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke={C.surface2} vertical={false} />
-            <XAxis dataKey="m" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} />
-            <YAxis yAxisId="v" tickFormatter={(v: number) => '£' + (v / 1000) + 'k'} tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={44} />
-            <YAxis yAxisId="o" orientation="right" tickFormatter={(v: number) => v + '%'} tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={40} />
-            <Tooltip formatter={(val: number, name: string) => name === 'value' ? ['£' + val.toLocaleString(), 'Booking value'] : [val + '%', name === 'occ' ? 'Occupancy' : 'Last-year pace']} />
-            <Bar yAxisId="v" dataKey="value" fill={C.blue} radius={[4, 4, 0, 0]} />
-            <Line yAxisId="o" dataKey="occ" stroke={C.navyDeep} strokeWidth={2.5} dot={false} />
-            <Line yAxisId="o" dataKey="pace" stroke={C.dim} strokeWidth={2} strokeDasharray="5 4" dot={false} />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Monthly performance */}
-      <div style={sCard}>
-        <div style={{ padding: '12px 20px', background: C.bluePale, borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: C.navy, fontSize: 13 }}>
-          {stats.targetYear} by month — departures, value, commission, occupancy vs {stats.compYear} pace
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                {['Month', 'Bookings', 'Value', 'Commission', 'Occupancy', `${stats.compYear} pace`, `${stats.compYear} final`, 'Status'].map(h => (
-                  <th key={h} style={{ textAlign: h === 'Month' ? 'left' : 'right', padding: '10px 16px', borderBottom: `1px solid ${C.surface2}` }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {stats.performanceTable.map((r, i) => (
-                <tr key={r.month} style={{ background: i === nowMonth ? C.amberPale : undefined }}>
-                  <td style={{ padding: '9px 16px', fontWeight: i === nowMonth ? 800 : 600, color: C.navyDeep }}>{r.month}</td>
-                  <td style={{ padding: '9px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.count}</td>
-                  <td style={{ padding: '9px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{gbp0(r.bookingValue)}</td>
-                  <td style={{ padding: '9px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.green, fontWeight: 700 }}>{gbp0(r.ourCommission)}</td>
-                  <td style={{ padding: '9px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{pct(r.occupancy)}</td>
-                  <td style={{ padding: '9px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.muted }}>{pct(r.pacingOcc)}</td>
-                  <td style={{ padding: '9px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.dim }}>{pct(r.finalOccLast)}</td>
-                  <td style={{ padding: '9px 16px', textAlign: 'right' }}><StatusPill status={r.pacingStatus} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Property breakdown */}
-      <div style={sCard}>
-        <div style={{ padding: '12px 20px', background: C.surface2, borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: C.navy, fontSize: 13 }}>
-          Property breakdown — {stats.targetYear} departures, by revenue
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                {['Property', 'Bookings', 'Nights', 'Revenue', 'Commission'].map(h => (
-                  <th key={h} style={{ textAlign: h === 'Property' ? 'left' : 'right', padding: '10px 16px', borderBottom: `1px solid ${C.surface2}` }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {propsShown.map(p => (
-                <tr key={p.name}>
-                  <td style={{ padding: '8px 16px', fontWeight: 600, color: C.navyDeep }}>{p.name}</td>
-                  <td style={{ padding: '8px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{p.bookings}</td>
-                  <td style={{ padding: '8px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{p.nights}</td>
-                  <td style={{ padding: '8px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{gbp0(p.revenue)}</td>
-                  <td style={{ padding: '8px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.green, fontWeight: 700 }}>{gbp0(p.commission)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {stats.propertyStats.length > 12 && (
-          <div
-            style={{ padding: '10px 20px', fontSize: 12.5, color: C.blue, cursor: 'pointer', borderTop: `1px solid ${C.surface2}`, fontWeight: 600 }}
-            onClick={() => setShowAllProps(s => !s)}
+          <button
+            onClick={() => { setRows(null); setRefreshKey(k => k + 1); }}
+            className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-[#003366] transition-colors"
           >
-            {showAllProps ? 'Show top 12' : `Show all ${stats.propertyStats.length} properties`}
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </button>
+        </div>
+      </motion.div>
+
+      <div className="max-w-7xl mx-auto px-6 py-8">
+
+        {/* HERO CARD */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="relative bg-[#003366] rounded-2xl shadow-2xl p-12 mb-10 overflow-hidden"
+        >
+          <div className="absolute inset-0 opacity-[0.05] pointer-events-none">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <Area type="monotone" dataKey="value" stroke="#FFFFFF" fill="#FFFFFF" strokeWidth={3} />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
-        )}
+          <div className="relative z-10">
+            <div className="flex items-center gap-3 mb-4 text-white/70">
+              <TrendingUp className="w-6 h-6" />
+              <span className="text-xs font-bold tracking-widest uppercase">Total {stats.targetYear} Management Commission</span>
+            </div>
+            <div className="font-mono-numbers text-7xl md:text-8xl font-bold text-white tracking-tighter">
+              <CountUp end={heroCommission} prefix="£" decimals={0} />
+            </div>
+          </div>
+        </motion.div>
+
+        {/* PULSE GRID */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+
+          {/* Total Occupancy Card */}
+          <motion.div whileHover={{ y: -5 }} className="bg-[#003366] rounded-xl shadow-lg border border-[#003366] p-6 text-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-10"><Building2 className="w-16 h-16" /></div>
+            <div className="flex justify-between items-center mb-6 relative z-10">
+              <h3 className="text-white/70 font-bold text-[10px] uppercase tracking-widest">Portfolio Occupancy</h3>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase flex items-center gap-1 ${occDiff >= 0 ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
+                {occDiff >= 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+                {Math.abs(occDiff).toFixed(1)}%
+              </span>
+            </div>
+            <div className="space-y-1 relative z-10">
+              <div className="text-4xl font-bold font-mono-numbers"><CountUp end={occCurrent} decimals={1} />%</div>
+              <div className="text-[11px] text-white/60 font-medium">vs {occPace.toFixed(1)}% Pace</div>
+            </div>
+          </motion.div>
+
+          {/* Sales Pulse Cards */}
+          {[
+            { label: 'Last 24 Hours', data: stats.pulse24h, tag: 'Live', color: 'bg-green-100 text-green-700' },
+            { label: 'Last 7 Days', data: stats.pulse7d, tag: 'Week', color: 'bg-blue-100 text-blue-700' },
+            { label: 'Last 30 Days', data: stats.pulse30d, tag: 'Month', color: 'bg-slate-100 text-slate-700' },
+          ].map((item, idx) => (
+            <div key={idx} className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between">
+              <div>
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">{item.label}</h3>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${item.color}`}>{item.tag}</span>
+                </div>
+                <div className="mb-4">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Commission</p>
+                  <p className="text-4xl font-bold text-[#003366] font-mono-numbers tracking-tighter">
+                    <CountUp end={item.data.ourCommission} prefix="£" decimals={0} />
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 border-t border-slate-50 pt-4">
+                <div>
+                  <p className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">Bookings</p>
+                  <div className="flex items-center gap-1.5 text-sm font-bold text-[#003366] font-mono-numbers">
+                    <Ticket className="w-3 h-3 opacity-50" />
+                    {formatNumber(item.data.count)}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">Value</p>
+                  <p className="text-sm font-bold text-slate-600 font-mono-numbers">
+                    {formatCurrency(item.data.bookingValue)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* MONTHLY TABLE */}
+        <div className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden mb-12">
+          <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
+            <h2 className="text-sm font-black text-[#003366] uppercase tracking-widest">Monthly Performance Breakdown</h2>
+            <div className="flex gap-6 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+              <div className="flex items-center gap-2"><div className="w-6 h-2 bg-[#003366] rounded-sm"></div> {stats.targetYear}</div>
+              <div className="flex items-center gap-2"><div className="w-6 h-2 bg-slate-300 rounded-sm"></div> {stats.compYear} Pace</div>
+              <div className="flex items-center gap-1.5"><div className="w-0.5 h-3 bg-slate-800/40 border-l border-dashed border-slate-800"></div> {stats.compYear} Final Target</div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-widest">
+                <tr>
+                  <th className="text-left py-4 px-8">Month</th>
+                  <th className="text-right py-4 px-8">Check-outs</th>
+                  <th className="text-right py-4 px-8">Revenue</th>
+                  <th className="text-left py-4 px-8 min-w-[320px]">Occupancy Pacing</th>
+                  <th className="text-right py-4 px-8 text-[#003366]">Commission</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {stats.performanceTable.map((row, index) => {
+                  const occ = row.occupancy;
+                  const pace = row.pacingOcc;
+                  const finalLast = row.finalOccLast;
+                  const delta = occ - pace;
+                  const isAhead = delta >= 0;
+
+                  return (
+                    <tr key={index} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-4 px-8 font-bold text-[#003366]">{row.month}</td>
+                      <td className="py-4 px-8 text-right font-mono-numbers text-slate-500">{formatNumber(row.count)}</td>
+                      <td className="py-4 px-8 text-right font-mono-numbers font-medium">{formatCurrency(row.bookingValue)}</td>
+                      <td className="py-4 px-8">
+                        <div className="flex items-center gap-6">
+                          <div className="flex-1 space-y-2 relative">
+                            {finalLast > 0 && (
+                              <div className="absolute top-0 bottom-0 z-10 w-px border-l-2 border-dashed border-slate-800/30" style={{ left: `${Math.min(finalLast, 100)}%` }} />
+                            )}
+                            <div className="relative h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                              <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(occ, 100)}%` }} transition={{ duration: 0.8 }} className="h-full bg-[#003366] rounded-full" />
+                            </div>
+                            <div className="relative h-2.5 bg-slate-50 rounded-full overflow-hidden">
+                              <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(pace, 100)}%` }} transition={{ duration: 0.8 }} className="h-full bg-slate-300 rounded-full" />
+                            </div>
+                          </div>
+                          <div className="w-24 flex flex-col items-end">
+                            <div className={`text-[10px] font-black flex items-center gap-0.5 ${isAhead ? 'text-green-600' : 'text-red-500'}`}>
+                              {isAhead ? <ArrowUp className="w-2 h-2" /> : <ArrowDown className="w-2 h-2" />}
+                              {Math.abs(delta).toFixed(1)}%
+                            </div>
+                            <div className="text-[11px] font-mono-numbers font-bold text-slate-700">
+                              {occ.toFixed(1)}% <span className="text-slate-300 font-normal">/ {pace.toFixed(1)}%</span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-8 text-right font-mono-numbers font-bold text-[#003366] bg-slate-50/30">{formatCurrency(row.ourCommission)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* PROPERTY BREAKDOWN */}
+        <div className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden">
+          <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+            <h2 className="text-sm font-black text-[#003366] uppercase tracking-widest">Property Breakdown — {stats.targetYear} by Revenue</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-widest">
+                <tr>
+                  <th className="text-left py-4 px-8">Property</th>
+                  <th className="text-right py-4 px-8">Bookings</th>
+                  <th className="text-right py-4 px-8">Nights</th>
+                  <th className="text-right py-4 px-8">Revenue</th>
+                  <th className="text-right py-4 px-8 text-[#003366]">Commission</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {propsShown.map(p => (
+                  <tr key={p.name} className="hover:bg-slate-50 transition-colors">
+                    <td className="py-3.5 px-8 font-bold text-[#003366]">{p.name}</td>
+                    <td className="py-3.5 px-8 text-right font-mono-numbers text-slate-500">{formatNumber(p.bookings)}</td>
+                    <td className="py-3.5 px-8 text-right font-mono-numbers text-slate-500">{formatNumber(p.nights)}</td>
+                    <td className="py-3.5 px-8 text-right font-mono-numbers font-medium">{formatCurrency(p.revenue)}</td>
+                    <td className="py-3.5 px-8 text-right font-mono-numbers font-bold text-[#003366] bg-slate-50/30">{formatCurrency(p.commission)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {stats.propertyStats.length > 12 && (
+            <button
+              className="w-full py-3 text-[11px] font-black uppercase tracking-widest text-slate-500 hover:text-[#003366] border-t border-slate-100 transition-colors"
+              onClick={() => setShowAllProps(s => !s)}
+            >
+              {showAllProps ? 'Show top 12' : `Show all ${stats.propertyStats.length} properties`}
+            </button>
+          )}
+        </div>
+
       </div>
     </div>
   );

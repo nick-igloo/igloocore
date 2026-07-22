@@ -1,38 +1,58 @@
 import { useEffect, useRef, useState } from 'react';
 
 interface CountUpProps {
-  to: number;
+  end: number;
   duration?: number;
+  className?: string;
+  prefix?: string;
+  suffix?: string;
   decimals?: number;
 }
 
-export const CountUp: React.FC<CountUpProps> = ({ to, duration = 1200, decimals = 0 }) => {
-  const [value, setValue] = useState(0);
-  const frameRef = useRef<number | null>(null);
+export function CountUp({
+  end,
+  duration = 1500,
+  className = '',
+  prefix = '',
+  suffix = '',
+  decimals = 2
+}: CountUpProps) {
+  const [count, setCount] = useState(0);
+  const countRef = useRef(0);
   const startTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
-    startTimeRef.current = null;
+    const animate = (currentTime: number) => {
+      if (!startTimeRef.current) {
+        startTimeRef.current = currentTime;
+      }
 
-    const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
-
-    const tick = (timestamp: number) => {
-      if (!startTimeRef.current) startTimeRef.current = timestamp;
-      const elapsed = timestamp - startTimeRef.current;
+      const elapsed = currentTime - startTimeRef.current;
       const progress = Math.min(elapsed / duration, 1);
-      setValue(parseFloat((easeOut(progress) * to).toFixed(decimals)));
+
+      const easeOutQuart = 1 - Math.pow(1 - progress, 4);
+
+      countRef.current = easeOutQuart * end;
+      setCount(countRef.current);
+
       if (progress < 1) {
-        frameRef.current = requestAnimationFrame(tick);
+        requestAnimationFrame(animate);
       } else {
-        setValue(to);
+        setCount(end);
       }
     };
 
-    frameRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
-    };
-  }, [to, duration, decimals]);
+    requestAnimationFrame(animate);
+  }, [end, duration]);
 
-  return <>{decimals > 0 ? value.toFixed(decimals) : value.toLocaleString()}</>;
-};
+  const formattedValue = count.toLocaleString('en-GB', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+
+  return (
+    <span className={className}>
+      {prefix}{formattedValue}{suffix}
+    </span>
+  );
+}
