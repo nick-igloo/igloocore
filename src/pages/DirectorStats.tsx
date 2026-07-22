@@ -259,6 +259,7 @@ export default function DirectorStats() {
         portfolio: stats.portfolio,
         recentBookings: stats.recentBookings,
         upcomingBookings: stats.upcomingBookings,
+        nextYearMonths: stats.nextYearMonths,
         properties: stats.propertyStats.map(p => ({ name: p.name, revenue: Math.round(p.revenue), commission: Math.round(p.commission), bookings: p.bookings, nights: p.nights, lastYear: { revenue: Math.round(p.revenueLast), bookings: p.bookingsLast, nights: p.nightsLast } })),
   });
 

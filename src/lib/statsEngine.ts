@@ -23,6 +23,7 @@ export interface RecentBooking {
   leadDays: number | null; nights: number; value: number;
 }
 export interface UpcomingBooking { property: string; checkin: string; nights: number; }
+export interface NextYearMonth { property: string; month: string; bookings: number; nights: number; }
 export interface DirectorStats {
   targetYear: number; compYear: number;
   pulse24h: PulseStat; pulse7d: PulseStat; pulse30d: PulseStat;
@@ -33,6 +34,7 @@ export interface DirectorStats {
   propertyStats: PropertyStat[];
   recentBookings: RecentBooking[];
   upcomingBookings: UpcomingBooking[];
+  nextYearMonths: NextYearMonth[];
   totalNights: number; totalNightsLast: number;
   portfolio: {
     activeThisYear: number; activeLastYear: number; newThisYear: number;
@@ -83,6 +85,7 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
   const pulse30d = { count: 0, val: 0, comm: 0 };
   const recentBookings: RecentBooking[] = [];
   const upcomingBookings: UpcomingBooking[] = [];
+  const nextYearAgg = new Map<string, { property: string; month: string; bookings: number; nights: number }>();
 
   for (const row of rows) {
     const id = String(row['Booking number'] ?? '');
@@ -112,11 +115,16 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
     // Forward calendar feed: every confirmed stay from a week ago onward
     // (any year) — enables gap/open-week analysis per property.
     if (checkIn && (checkIn.getTime() - now.getTime()) / 86400000 >= -7) {
-      upcomingBookings.push({
-        property: pid,
-        checkin: checkIn.toISOString().slice(0, 10),
-        nights: toNum(row['nights'] ?? row['Nights']),
-      });
+      const n = toNum(row['nights'] ?? row['Nights']);
+      if (checkIn.getFullYear() <= targetYear) {
+        upcomingBookings.push({ property: pid, checkin: checkIn.toISOString().slice(0, 10), nights: n });
+      } else {
+        const month = checkIn.toISOString().slice(0, 7);
+        const k = pid + '|' + month;
+        const cur = nextYearAgg.get(k) || { property: pid, month, bookings: 0, nights: 0 };
+        cur.bookings += 1; cur.nights += n;
+        nextYearAgg.set(k, cur);
+      }
     }
 
     // Report window: this is a departures-based revenue report. Only
@@ -274,7 +282,8 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
     performanceTable,
     propertyStats,
     recentBookings: recentBookings.sort((a, b) => b.created.localeCompare(a.created)).slice(0, 120),
-    upcomingBookings: upcomingBookings.sort((a, b) => a.checkin.localeCompare(b.checkin)).slice(0, 600),
+    upcomingBookings: upcomingBookings.sort((a, b) => a.checkin.localeCompare(b.checkin)).slice(0, 400),
+    nextYearMonths: Array.from(nextYearAgg.values()).sort((a, b) => a.month.localeCompare(b.month)),
     totalNights: statsCurrentYear.reduce((a, m) => a + m.soldNights, 0),
     totalNightsLast: statsLastYearFinal.reduce((a, m) => a + m.soldNights, 0),
     portfolio,
