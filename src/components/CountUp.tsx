@@ -10,13 +10,14 @@ interface CountUpProps {
 }
 
 export function CountUp({
-  end,
+  end: endRaw,
   duration = 1500,
   className = '',
   prefix = '',
   suffix = '',
   decimals = 2
 }: CountUpProps) {
+  const end = Number.isFinite(endRaw) ? endRaw : 0;
   const [count, setCount] = useState(0);
   const countRef = useRef(0);
   const startTimeRef = useRef<number | null>(null);
@@ -45,7 +46,8 @@ export function CountUp({
     requestAnimationFrame(animate);
   }, [end, duration]);
 
-  const formattedValue = count.toLocaleString('en-GB', {
+  const safe = Number.isFinite(count) ? count : 0;
+  const formattedValue = safe.toLocaleString('en-GB', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
