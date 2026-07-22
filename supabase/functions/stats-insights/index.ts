@@ -13,7 +13,9 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
   try {
-    const stats = await req.json();
+    const body = await req.json();
+    const stats = body.stats ?? body;
+    const chatMessages = Array.isArray(body.messages) ? body.messages : null;
 
     const system = `You are the analytics director for Igloo, a short-term rental property management company in Aviemore in the Cairngorms, Scotland. You are given the live booking dataset summary: monthly performance for the current year (departures-based revenue, management commission, occupancy vs last year's booking pace and last year's final), sales pulse (bookings created in the last 24h/7d/30d), and per-property year figures.
 
@@ -32,6 +34,12 @@ Respond ONLY with valid JSON, no markdown fences, in this shape:
   "actions": [ "specific recommended action" ]                            // 2 to 4 items
 }`;
 
+    const chatSystem = system.split('Respond ONLY with valid JSON')[0] +
+      `You are chatting with one of the directors. Answer their questions conversationally and concisely (a short paragraph or two, or a compact list when comparing), grounded ONLY in the dataset provided below. Apply the reasoning rules above. If the data cannot answer something, say so plainly rather than guessing. British English.
+
+DATASET:
+` + JSON.stringify(stats);
+
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -39,12 +47,11 @@ Respond ONLY with valid JSON, no markdown fences, in this shape:
         "x-api-key": Deno.env.get("ANTHROPIC_API_KEY") ?? "",
         "anthropic-version": "2023-06-01",
       },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1500,
-        system,
-        messages: [{ role: "user", content: JSON.stringify(stats) }],
-      }),
+      body: JSON.stringify(
+        chatMessages
+          ? { model: "claude-sonnet-4-6", max_tokens: 1200, system: chatSystem, messages: chatMessages.slice(-12) }
+          : { model: "claude-sonnet-4-6", max_tokens: 1500, system, messages: [{ role: "user", content: JSON.stringify(stats) }] }
+      ),
     });
 
     if (!anthropicRes.ok) {
@@ -62,6 +69,11 @@ Respond ONLY with valid JSON, no markdown fences, in this shape:
       .replace(/```json|```/g, "")
       .trim();
 
+    if (chatMessages) {
+      return new Response(JSON.stringify({ reply: text }), {
+        headers: { ...corsHeaders, "content-type": "application/json" },
+      });
+    }
     const parsed = JSON.parse(text);
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "content-type": "application/json" },

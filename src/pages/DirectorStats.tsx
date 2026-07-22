@@ -225,12 +225,30 @@ export default function DirectorStats() {
   const [insights, setInsights] = useState<{ headline: string; insights: { title: string; body: string }[]; patterns?: string[]; actions: string[] } | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsErr, setInsightsErr] = useState<string | null>(null);
+  const [chat, setChat] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatSending, setChatSending] = useState(false);
 
-  const generateInsights = async () => {
-    if (!stats) return;
-    setInsightsLoading(true); setInsightsErr(null);
+  const sendChat = async () => {
+    const q = chatInput.trim();
+    if (!q || chatSending || !stats) return;
+    const next = [...chat, { role: 'user' as const, content: q }];
+    setChat(next); setChatInput(''); setChatSending(true);
     try {
-      const payload = {
+      const { data, error } = await supabase.functions.invoke('stats-insights', {
+        body: { stats: buildPayload(), messages: next },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setChat([...next, { role: 'assistant', content: data.reply || '…' }]);
+    } catch (e) {
+      setChat([...next, { role: 'assistant', content: 'Sorry — that failed: ' + (e instanceof Error ? e.message : String(e)) }]);
+    } finally {
+      setChatSending(false);
+    }
+  };
+
+  const buildPayload = () => stats && ({
         today: new Date().toISOString().slice(0, 10),
         year: stats.targetYear, compYear: stats.compYear,
         totalNights: { thisYear: stats.totalNights, lastYear: stats.totalNightsLast },
@@ -241,8 +259,13 @@ export default function DirectorStats() {
         portfolio: stats.portfolio,
         recentBookings: stats.recentBookings,
         properties: stats.propertyStats.map(p => ({ name: p.name, revenue: Math.round(p.revenue), commission: Math.round(p.commission), bookings: p.bookings, nights: p.nights, lastYear: { revenue: Math.round(p.revenueLast), bookings: p.bookingsLast, nights: p.nightsLast } })),
-      };
-      const { data, error } = await supabase.functions.invoke('stats-insights', { body: payload });
+  });
+
+  const generateInsights = async () => {
+    if (!stats) return;
+    setInsightsLoading(true); setInsightsErr(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('stats-insights', { body: buildPayload() });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       setInsights(data);
@@ -493,6 +516,49 @@ export default function DirectorStats() {
                 </button>
               </div>
             )}
+
+            {/* Ask the analyst */}
+            <div className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden mt-8">
+              <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+                <h2 className="text-sm font-black text-[#003366] uppercase tracking-widest">Ask the analyst</h2>
+                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-1">Answers grounded in the live dataset — try "How is Eagle Lodge doing vs last year?"</p>
+              </div>
+              {chat.length > 0 && (
+                <div className="p-6 space-y-4 max-h-[420px] overflow-y-auto">
+                  {chat.map((m, i) => (
+                    <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+                      <div className={`max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
+                        m.role === 'user' ? 'bg-[#003366] text-white' : 'bg-slate-50 border border-slate-200 text-slate-700'
+                      }`}>
+                        {m.content}
+                      </div>
+                    </div>
+                  ))}
+                  {chatSending && (
+                    <div className="flex justify-start">
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-400">Thinking…</div>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="p-4 border-t border-slate-100 flex gap-3">
+                <input
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') sendChat(); }}
+                  placeholder="Ask about pacing, properties, patterns…"
+                  className="flex-1 px-4 py-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-[#003366] focus:ring-2 focus:ring-[#003366]/10"
+                />
+                <button
+                  onClick={sendChat}
+                  disabled={chatSending || !chatInput.trim()}
+                  className="px-6 py-3 bg-[#003366] text-white rounded-lg font-black uppercase tracking-widest text-xs disabled:opacity-40 hover:bg-[#004488] transition-colors"
+                >
+                  Ask
+                </button>
+              </div>
+            </div>
+
           </div>
         )}
 
