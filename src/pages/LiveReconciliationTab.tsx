@@ -170,12 +170,25 @@ export default function LiveReconciliationTab({ bookings }: Props) {
     (async () => {
       setLoading(true); setLoadErr(null);
       try {
+        // Paginated fetch: Supabase caps selects at 1000 rows, and the SoT
+        // sync grew recon_avantio_bookings well past that.
+        const fetchAll = async (build: () => any) => {
+          const out: any[] = [];
+          const PAGE = 1000;
+          for (let from = 0; ; from += PAGE) {
+            const { data, error } = await build().range(from, from + PAGE - 1);
+            if (error) return { data: null, error };
+            out.push(...(data || []));
+            if (!data || data.length < PAGE) break;
+          }
+          return { data: out, error: null };
+        };
         const [avRes, apRes, aiRes, bcRes, bkRes] = await Promise.all([
-          supabase.from('recon_avantio_bookings').select('*'),
-          supabase.from('recon_airbnb_payouts').select('*').eq('superseded', false),
-          supabase.from('recon_airbnb_payout_items').select('*'),
-          supabase.from('recon_bcom_reservations').select('*'),
-          supabase.from('recon_bank_transactions').select('*'),
+          fetchAll(() => supabase.from('recon_avantio_bookings').select('*')),
+          fetchAll(() => supabase.from('recon_airbnb_payouts').select('*').eq('superseded', false)),
+          fetchAll(() => supabase.from('recon_airbnb_payout_items').select('*')),
+          fetchAll(() => supabase.from('recon_bcom_reservations').select('*')),
+          fetchAll(() => supabase.from('recon_bank_transactions').select('*')),
         ]);
         const firstErr = [avRes, apRes, aiRes, bcRes, bkRes].find(r => r.error);
         if (firstErr?.error) throw firstErr.error;
