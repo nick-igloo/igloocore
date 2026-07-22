@@ -52,9 +52,14 @@ n8n. Zero frontend changes.
   required, text ≤ 700 chars. The workflow falls back to the image name if no
   description was written, and truncates to 700.
 
-Still unverified: the **LOCATION OBJECT** on Create Accommodation beyond
-`countryCode` (the UI's city field is currently display-only until the field
-name is confirmed).
+- **Location object** — `cityName` (≤150) is **required** alongside
+  `countryCode` (ISO alpha-2, GB confirmed in the enum); both are sent.
+  Optional fields exist (addrType, address, admin1, postalCode, coordinates,
+  door/floor/number/stair, resort) and can be added to the demo later if
+  wanted.
+
+Everything the publisher sends is now verified against the portal — a 400
+from the sandbox should only ever mean bad data, not bad field names.
 
 ## Swapping to live later
 

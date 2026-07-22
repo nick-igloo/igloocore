@@ -113,7 +113,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  name: $json.body.property.name,\n  type: $json.body.property.type,\n  purpose: $json.body.property.purpose,\n  status: $json.body.property.status,\n  location: { countryCode: $json.body.property.countryCode }\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  name: $json.body.property.name,\n  type: $json.body.property.type,\n  purpose: $json.body.property.purpose,\n  status: $json.body.property.status,\n  location: { countryCode: $json.body.property.countryCode, cityName: $json.body.property.cityName }\n}) }}",
         "options": {}
       },
       "id": "avantio-create-accommodation",

@@ -231,6 +231,7 @@ export default function PropertyPublisher() {
 
   const canPublish =
     propName.trim().length > 0 &&
+    city.trim().length > 0 &&
     images.length > 0 &&
     images.every(im => im.category) &&
     publish !== 'publishing';
@@ -250,7 +251,7 @@ export default function PropertyPublisher() {
           property: {
             name: propName,
             type: propType,
-            city,
+            cityName: city.trim(),
             countryCode: 'GB',
             purpose: 'RENTAL',
             status: 'ENABLED',
@@ -386,7 +387,7 @@ export default function PropertyPublisher() {
           </button>
           {!canPublish && publish !== 'publishing' && (
             <p className="text-[11px] text-slate-400 text-center -mt-2">
-              Needs a name, at least one photo, and a category on every photo.
+              Needs a name, a city, at least one photo, and a category on every photo.
             </p>
           )}
           <p className="text-[11px] text-slate-400 text-center">
