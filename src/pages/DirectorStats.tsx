@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { computeDirectorStats, DirectorStats as Stats } from '../lib/statsEngine';
+import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 
 const C = {
   navyDeep: '#0d2850', navy: '#1a4a7a', blue: '#2e7cc7', bluePale: '#e8f1fa',
@@ -44,13 +45,22 @@ export default function DirectorStats() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
-        .from('property_bookings_cache')
-        .select('raw')
-        .not('raw', 'is', null);
-      if (cancelled) return;
-      if (error) { setErr(error.message); return; }
-      setRows(((data || []) as { raw: Record<string, unknown> }[]).map(d => d.raw));
+      // Paginate past Supabase's 1000-row default limit
+      const all: Record<string, unknown>[] = [];
+      const PAGE = 1000;
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from('property_bookings_cache')
+          .select('raw')
+          .not('raw', 'is', null)
+          .range(from, from + PAGE - 1);
+        if (cancelled) return;
+        if (error) { setErr(error.message); return; }
+        const chunk = ((data || []) as { raw: Record<string, unknown> }[]).map(d => d.raw);
+        all.push(...chunk);
+        if (chunk.length < PAGE) break;
+      }
+      setRows(all);
     })();
     return () => { cancelled = true; };
   }, [refreshKey]);
@@ -142,6 +152,29 @@ export default function DirectorStats() {
             </div>
           </div>
         ))}
+      </div>
+
+
+      {/* Revenue + occupancy chart */}
+      <div style={{ ...sCard, padding: '18px 20px 6px' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+          {stats.targetYear} monthly booking value (bars) and occupancy vs {stats.compYear} pace (lines)
+        </div>
+        <ResponsiveContainer width="100%" height={240}>
+          <ComposedChart data={stats.performanceTable.map(r => ({
+            m: r.month.slice(0, 3), value: Math.round(r.bookingValue),
+            occ: +r.occupancy.toFixed(1), pace: +r.pacingOcc.toFixed(1),
+          }))} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={C.surface2} vertical={false} />
+            <XAxis dataKey="m" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} />
+            <YAxis yAxisId="v" tickFormatter={(v: number) => '£' + (v / 1000) + 'k'} tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={44} />
+            <YAxis yAxisId="o" orientation="right" tickFormatter={(v: number) => v + '%'} tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={40} />
+            <Tooltip formatter={(val: number, name: string) => name === 'value' ? ['£' + val.toLocaleString(), 'Booking value'] : [val + '%', name === 'occ' ? 'Occupancy' : 'Last-year pace']} />
+            <Bar yAxisId="v" dataKey="value" fill={C.blue} radius={[4, 4, 0, 0]} />
+            <Line yAxisId="o" dataKey="occ" stroke={C.navyDeep} strokeWidth={2.5} dot={false} />
+            <Line yAxisId="o" dataKey="pace" stroke={C.dim} strokeWidth={2} strokeDasharray="5 4" dot={false} />
+          </ComposedChart>
+        </ResponsiveContainer>
       </div>
 
       {/* Monthly performance */}

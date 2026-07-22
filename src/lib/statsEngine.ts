@@ -70,7 +70,7 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
     if (!id || processedIds.has(id)) continue;
     processedIds.add(id);
 
-    const pid = String(row['Property ID'] || row['Property name'] || 'Unknown Property');
+    const pid = String(row['Property name'] || row['Property ID'] || 'Unknown Property');
     const created = parseDate(row['Date']);
     const checkIn = parseDate(row['Check-in date']);
     const checkOut = parseDate(row['Check-out date']);
