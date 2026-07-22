@@ -22,6 +22,7 @@ interface RawBooking {
   reference?: string;
   accommodation?: string | number | { id?: string | number; name?: string };
   accommodationId?: string | number;
+  stayDates?: { arrival?: string; departure?: string };
   arrivalDate?: string;
   departureDate?: string;
   status?: string;
@@ -46,9 +47,11 @@ const DAY = 86_400_000;
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 function normalise(b: RawBooking, accNames: Record<string, string>): BookingVM | null {
-  const arrival = String(b.arrivalDate || '').slice(0, 10);
-  const departure = String(b.departureDate || '').slice(0, 10);
+  // Real shape (confirmed against the live API): dates nest under stayDates.
+  const arrival = String(b.stayDates?.arrival || b.arrivalDate || '').slice(0, 10);
+  const departure = String(b.stayDates?.departure || b.departureDate || '').slice(0, 10);
   if (!arrival || !departure) return null;
+  if (String(b.status || '').toUpperCase() === 'CANCELLED') return null;
   const accRaw = b.accommodation;
   const accommodationId = String(
     (typeof accRaw === 'object' && accRaw ? accRaw.id : accRaw) ?? b.accommodationId ?? '',
