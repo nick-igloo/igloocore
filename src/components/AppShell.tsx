@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Outlet, NavLink, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Calculator, Activity, TrendingUp, FileText, Receipt, ShieldCheck, Zap,
-  TreePine, Home, FolderSync, Settings as SettingsIcon,
+  Home, FolderSync, Settings as SettingsIcon,
   BarChart3, Menu, X,
 } from 'lucide-react';
 
@@ -29,7 +29,6 @@ const NAV = [
     items: [
       { to: '/daily-safety', label: 'Daily Checks', icon: ShieldCheck },
       { to: '/pat-testing', label: 'PAT Testing', icon: Zap },
-      { to: '/woodland-safety', label: 'Woodland Safety', icon: TreePine },
     ],
   },
   {
