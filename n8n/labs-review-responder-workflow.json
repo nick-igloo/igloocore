@@ -1,5 +1,5 @@
 {
-  "name": "Labs · Review Responder",
+  "name": "Labs \u00b7 Review Responder",
   "nodes": [
     {
       "parameters": {
@@ -14,7 +14,10 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,12 +25,18 @@
           "values": [
             {
               "conditions": {
-                "options": { "caseSensitive": true, "version": 2 },
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2
+                },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.body.action }}",
                     "rightValue": "list_reviews",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -37,12 +46,18 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": true, "version": 2 },
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2
+                },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.body.action }}",
                     "rightValue": "draft_reply",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -52,12 +67,18 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": true, "version": 2 },
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2
+                },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.body.action }}",
                     "rightValue": "send_reply",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -73,7 +94,10 @@
       "name": "Route by action",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -83,13 +107,24 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "pagination_size", "value": "50" },
-            { "name": "sort", "value": "-id" }
+            {
+              "name": "pagination_size",
+              "value": "50"
+            },
+            {
+              "name": "sort",
+              "value": "-id"
+            }
           ]
         },
         "sendHeaders": true,
         "headerParameters": {
-          "parameters": [{ "name": "accept", "value": "application/json" }]
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
         },
         "options": {}
       },
@@ -97,7 +132,10 @@
       "name": "Avantio: list reviews",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [460, -160],
+      "position": [
+        460,
+        -160
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "REPLACE_WITH_AVANTIO_TEST_CRED",
@@ -115,7 +153,10 @@
       "name": "Respond (reviews)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [700, -160]
+      "position": [
+        700,
+        -160
+      ]
     },
     {
       "parameters": {
@@ -126,8 +167,14 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "anthropic-version", "value": "2023-06-01" },
-            { "name": "content-type", "value": "application/json" }
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -139,7 +186,10 @@
       "name": "Claude: draft reply",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [460, 0],
+      "position": [
+        460,
+        0
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "REPLACE_WITH_ANTHROPIC_HEADER_CRED",
@@ -155,7 +205,10 @@
       "name": "Extract draft",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, 0]
+      "position": [
+        700,
+        0
+      ]
     },
     {
       "parameters": {
@@ -167,7 +220,10 @@
       "name": "Respond (draft)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [940, 0]
+      "position": [
+        940,
+        0
+      ]
     },
     {
       "parameters": {
@@ -178,20 +234,29 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "accept", "value": "application/json" },
-            { "name": "content-type", "value": "application/json" }
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  response: String($json.body.response).slice(0, 4000),\n  responseDate: new Date().toISOString()\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  response: String($json.body.response).slice(0, 4000),\n  responseDate: new Date().toISOString().slice(0, 10)\n}) }}",
         "options": {}
       },
       "id": "avantio-send-response",
       "name": "Avantio: send review response",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [460, 160],
+      "position": [
+        460,
+        160
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "REPLACE_WITH_AVANTIO_TEST_CRED",
@@ -209,23 +274,96 @@
       "name": "Respond (sent)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [700, 160]
+      "position": [
+        700,
+        160
+      ]
     }
   ],
   "connections": {
-    "Webhook": { "main": [[{ "node": "Route by action", "type": "main", "index": 0 }]] },
-    "Route by action": {
+    "Webhook": {
       "main": [
-        [{ "node": "Avantio: list reviews", "type": "main", "index": 0 }],
-        [{ "node": "Claude: draft reply", "type": "main", "index": 0 }],
-        [{ "node": "Avantio: send review response", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Route by action",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Avantio: list reviews": { "main": [[{ "node": "Respond (reviews)", "type": "main", "index": 0 }]] },
-    "Claude: draft reply": { "main": [[{ "node": "Extract draft", "type": "main", "index": 0 }]] },
-    "Extract draft": { "main": [[{ "node": "Respond (draft)", "type": "main", "index": 0 }]] },
-    "Avantio: send review response": { "main": [[{ "node": "Respond (sent)", "type": "main", "index": 0 }]] }
+    "Route by action": {
+      "main": [
+        [
+          {
+            "node": "Avantio: list reviews",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Claude: draft reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Avantio: send review response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avantio: list reviews": {
+      "main": [
+        [
+          {
+            "node": "Respond (reviews)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude: draft reply": {
+      "main": [
+        [
+          {
+            "node": "Extract draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract draft": {
+      "main": [
+        [
+          {
+            "node": "Respond (draft)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avantio: send review response": {
+      "main": [
+        [
+          {
+            "node": "Respond (sent)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "pinData": {}
 }
