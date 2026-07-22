@@ -119,18 +119,26 @@ export default function BookingCalendar() {
   const todayIdx = Math.floor((+new Date(iso(new Date())) - +monthStart) / DAY);
   const move = (delta: number) => setAnchor(a => new Date(a.getFullYear(), a.getMonth() + delta, 1));
 
-  // Bar geometry: half-day insets so back-to-back bookings butt at the
-  // changeover cell instead of overlapping (standard tape-chart look).
+  // Bar geometry: standard PMS tape chart. A stay runs from the MIDDLE
+  // of the arrival cell to the MIDDLE of the departure cell, and both
+  // bar ends are cut on the same diagonal — so a same-day changeover
+  // shows the outgoing and incoming bars meeting on a slash inside
+  // one cell. Bars clipped at month edges get a square end instead.
+  const SLANT = 10;
   const barPos = (b: BookingVM) => {
-    const startDays = Math.max(0, (+b.arrival - +monthStart) / DAY + 0.5);
-    const endDays = Math.min(daysInMonth, (+b.departure - +monthStart) / DAY + 0.5);
-    const clippedStart = b.arrival < monthStart;
-    const clippedEnd = b.departure > monthEnd;
-    return {
-      left: (clippedStart ? 0 : startDays) * CELL_W,
-      width: ((clippedEnd ? daysInMonth : endDays) - (clippedStart ? 0 : startDays)) * CELL_W,
-      clippedStart, clippedEnd,
-    };
+    const startDays = (+b.arrival - +monthStart) / DAY + 0.5;
+    const endDays = (+b.departure - +monthStart) / DAY + 0.5;
+    const clippedStart = startDays < 0;
+    const clippedEnd = endDays > daysInMonth;
+    const left = (clippedStart ? 0 : startDays) * CELL_W;
+    const width = ((clippedEnd ? daysInMonth : endDays) - (clippedStart ? 0 : startDays)) * CELL_W;
+    // Parallelogram: left edge slants from (SLANT,0) down to (0,100%),
+    // right edge from (100%,0) down to (100%-SLANT,100%). Clipped
+    // month-boundary ends stay square.
+    const tl = clippedStart ? 0 : SLANT;
+    const br = clippedEnd ? 0 : SLANT;
+    const clipPath = `polygon(${tl}px 0, 100% 0, calc(100% - ${br}px) 100%, 0 100%)`;
+    return { left, width, clipPath };
   };
 
   return (
@@ -241,15 +249,13 @@ export default function BookingCalendar() {
                   })}
                   {/* Booking bars */}
                   {row.bookings.map(b => {
-                    const { left, width, clippedStart, clippedEnd } = barPos(b);
+                    const { left, width, clipPath } = barPos(b);
                     return (
                       <button key={b.id} onClick={() => setSelected(b)}
                         title={`${row.name} · ${iso(b.arrival)} → ${iso(b.departure)} · ${b.nights}n · ${b.status}`}
-                        className={`absolute flex items-center px-1.5 text-[10px] font-bold truncate shadow-sm hover:brightness-95 ${statusStyle(b.status)} ${
-                          clippedStart ? 'rounded-r-md' : clippedEnd ? 'rounded-l-md' : 'rounded-md'
-                        }`}
-                        style={{ left, width: Math.max(width, 14), top: 7, height: ROW_H - 14 }}>
-                        {width > 50 ? `${b.nights}n` : ''}
+                        className={`absolute flex items-center justify-center text-[10px] font-bold truncate hover:brightness-95 ${statusStyle(b.status)}`}
+                        style={{ left, width: Math.max(width, 16), top: 6, height: ROW_H - 12, clipPath, paddingLeft: 12, paddingRight: 12 }}>
+                        {width > 60 ? `${b.nights}n` : ''}
                       </button>
                     );
                   })}
@@ -266,7 +272,7 @@ export default function BookingCalendar() {
           <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-400 inline-block" /> unpaid</span>
           <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-400 inline-block" /> payment pending</span>
           <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-sky-300 inline-block" /> enquiry</span>
-          <span>· empty tape = gap · butted bars = changeover · click a bar for details</span>
+          <span>· empty tape = gap · diagonal seam in one cell = same-day changeover · click a bar for details</span>
         </div>
       )}
     </div>
