@@ -38,10 +38,6 @@
             {
               "name": "pagination_size",
               "value": "100"
-            },
-            {
-              "name": "sort",
-              "value": "arrivalDate"
             }
           ]
         },
