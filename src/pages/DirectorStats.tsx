@@ -305,6 +305,11 @@ export default function DirectorStats() {
     [rows],
   );
 
+  useEffect(() => {
+    if (tab === 'insights' && stats && !insights && !insightsLoading) generateInsights();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, stats]);
+
   const propStats: Stats | null = useMemo(() => {
     if (!rows || !selectedProp) return null;
     const filtered = rows.filter(r =>
@@ -510,12 +515,9 @@ export default function DirectorStats() {
                   </div>
                 </div>
 
-                <button
-                  onClick={generateInsights}
-                  className="text-xs font-black uppercase tracking-widest text-slate-500 hover:text-[#003366] transition-colors flex items-center gap-2"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Regenerate
-                </button>
+                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">
+                  Today's read — refreshes daily
+                </p>
               </div>
             )}
 
