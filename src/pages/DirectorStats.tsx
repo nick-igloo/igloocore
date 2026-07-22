@@ -222,7 +222,7 @@ export default function DirectorStats() {
   const [showAllProps, setShowAllProps] = useState(false);
   const [tab, setTab] = useState<'portfolio' | 'properties' | 'insights'>('portfolio');
   const [selectedProp, setSelectedProp] = useState<string | null>(null);
-  const [insights, setInsights] = useState<{ headline: string; insights: { title: string; body: string }[]; actions: string[] } | null>(null);
+  const [insights, setInsights] = useState<{ headline: string; insights: { title: string; body: string }[]; patterns?: string[]; actions: string[] } | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsErr, setInsightsErr] = useState<string | null>(null);
 
@@ -231,12 +231,15 @@ export default function DirectorStats() {
     setInsightsLoading(true); setInsightsErr(null);
     try {
       const payload = {
+        today: new Date().toISOString().slice(0, 10),
         year: stats.targetYear, compYear: stats.compYear,
+        totalNights: { thisYear: stats.totalNights, lastYear: stats.totalNightsLast },
         occupancy: { current: +stats.occupancyCurrent.toFixed(1), lastYearPace: +stats.occupancyPace.toFixed(1) },
         totals: { bookingValue: Math.round(stats.totalRevenue), commission: Math.round(stats.totalCommission), ownerValue: Math.round(stats.totalOwnerValue), ownerValueLastYear: Math.round(stats.totalOwnerValueLast) },
         pulse: { last24h: stats.pulse24h, last7d: stats.pulse7d, last30d: stats.pulse30d },
-        monthly: stats.performanceTable.map(m => ({ month: m.month, bookings: m.count, value: Math.round(m.bookingValue), commission: Math.round(m.ourCommission), occ: +m.occupancy.toFixed(1), pace: +m.pacingOcc.toFixed(1), lastFinal: +m.finalOccLast.toFixed(1), status: m.pacingStatus })),
+        monthly: stats.performanceTable.map(m => ({ month: m.month, bookings: m.count, value: Math.round(m.bookingValue), commission: Math.round(m.ourCommission), nights: m.nights, occ: +m.occupancy.toFixed(1), pace: +m.pacingOcc.toFixed(1), lastFinal: +m.finalOccLast.toFixed(1), status: m.pacingStatus })),
         portfolio: stats.portfolio,
+        recentBookings: stats.recentBookings,
         properties: stats.propertyStats.map(p => ({ name: p.name, revenue: Math.round(p.revenue), commission: Math.round(p.commission), bookings: p.bookings, nights: p.nights, lastYear: { revenue: Math.round(p.revenueLast), bookings: p.bookingsLast, nights: p.nightsLast } })),
       };
       const { data, error } = await supabase.functions.invoke('stats-insights', { body: payload });
@@ -451,6 +454,22 @@ export default function DirectorStats() {
                     </div>
                   ))}
                 </div>
+
+
+                {insights.patterns && insights.patterns.length > 0 && (
+                  <div className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden mb-8">
+                    <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+                      <h2 className="text-sm font-black text-[#003366] uppercase tracking-widest">Booking patterns — last 30 days</h2>
+                    </div>
+                    <div className="p-6 flex flex-wrap gap-3">
+                      {insights.patterns.map((p, i) => (
+                        <div key={i} className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-700">
+                          {p}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden mb-8">
                   <div className="p-6 border-b border-slate-100 bg-slate-50/50">

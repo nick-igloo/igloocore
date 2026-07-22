@@ -10,12 +10,17 @@ export interface PulseStat { count: number; bookingValue: number; ourCommission:
 export interface PerformanceRow {
   month: string; count: number; bookingValue: number; ourCommission: number;
   ownerValue: number; ownerValueLast: number;
+  nights: number;
   occupancy: number; pacingOcc: number; finalOccLast: number;
   pacingStatus: 'ahead' | 'behind' | 'neutral';
 }
 export interface PropertyStat {
   name: string; revenue: number; commission: number; bookings: number; nights: number;
   revenueLast: number; bookingsLast: number; nightsLast: number;
+}
+export interface RecentBooking {
+  property: string; created: string; checkin: string | null;
+  leadDays: number | null; nights: number; value: number;
 }
 export interface DirectorStats {
   targetYear: number; compYear: number;
@@ -25,6 +30,8 @@ export interface DirectorStats {
   totalOwnerValue: number; totalOwnerValueLast: number;
   performanceTable: PerformanceRow[];
   propertyStats: PropertyStat[];
+  recentBookings: RecentBooking[];
+  totalNights: number; totalNightsLast: number;
   portfolio: {
     activeThisYear: number; activeLastYear: number; newThisYear: number;
     sameStoreCount: number; sameStoreNights: number; sameStoreNightsLast: number;
@@ -72,6 +79,7 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
   const pulse24h = { count: 0, val: 0, comm: 0 };
   const pulse7d = { count: 0, val: 0, comm: 0 };
   const pulse30d = { count: 0, val: 0, comm: 0 };
+  const recentBookings: RecentBooking[] = [];
 
   for (const row of rows) {
     const id = String(row['Booking number'] ?? '');
@@ -82,6 +90,22 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
     const created = parseDate(row['Date']);
     const checkIn = parseDate(row['Check-in date']);
     const checkOut = parseDate(row['Check-out date']);
+    // Recent bookings feed (pattern analysis): captured BEFORE the report
+    // window so next-year stays booked recently are visible to the analyst.
+    if (created) {
+      const dAge = (now.getTime() - created.getTime()) / 86400000;
+      if (dAge >= 0 && dAge <= 30) {
+        recentBookings.push({
+          property: pid,
+          created: created.toISOString().slice(0, 10),
+          checkin: checkIn ? checkIn.toISOString().slice(0, 10) : null,
+          leadDays: checkIn ? Math.round((checkIn.getTime() - created.getTime()) / 86400000) : null,
+          nights: toNum(row['nights'] ?? row['Nights']),
+          value: toNum(row['Booking total with tax']),
+        });
+      }
+    }
+
     // Report window: this is a departures-based revenue report. Only
     // bookings checking out within [Jan compYear .. Dec targetYear] exist
     // for its purposes — pulse, occupancy and revenue alike — making the
@@ -191,6 +215,7 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
       ourCommission: stat.commission,
       ownerValue: stat.ownerValue,
       ownerValueLast: statsLastYearFinal[index].ownerValue,
+      nights: stat.soldNights,
       occupancy: occCurrent,
       pacingOcc: occLastPace,
       finalOccLast: occLastFinal,
@@ -235,6 +260,9 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
     totalOwnerValueLast: performanceTable.reduce((a, m) => a + m.ownerValueLast, 0),
     performanceTable,
     propertyStats,
+    recentBookings: recentBookings.sort((a, b) => b.created.localeCompare(a.created)).slice(0, 120),
+    totalNights: statsCurrentYear.reduce((a, m) => a + m.soldNights, 0),
+    totalNightsLast: statsLastYearFinal.reduce((a, m) => a + m.soldNights, 0),
     portfolio,
     bookingsProcessed: processedIds.size,
   };
