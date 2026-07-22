@@ -1,0 +1,111 @@
+{
+  "name": "Labs · Gap Finder",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gap-finder",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://hq.igloo.scot"
+        }
+      },
+      "id": "webhook-in",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://api.avantio.pro/pms/v2/accommodations",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "pagination_size", "value": "20" }]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "accept", "value": "application/json" }]
+        },
+        "options": {}
+      },
+      "id": "list-accommodations",
+      "name": "Avantio: list accommodations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_AVANTIO_TEST_CRED",
+          "name": "Avantio X-Avantio-Auth (TEST)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per accommodation, carrying id + name for later pairing.\nconst list = $json.data || [];\nif (!list.length) throw new Error('No accommodations returned');\nreturn list.map(a => ({ json: { id: String(a.id), name: a.name || String(a.id) } }));"
+      },
+      "id": "one-per-accommodation",
+      "name": "One per accommodation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.avantio.pro/pms/v2/accommodations/{{ $json.id }}/availabilities",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "accept", "value": "application/json" }]
+        },
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "id": "get-availabilities",
+      "name": "Avantio: get availabilities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_AVANTIO_TEST_CRED",
+          "name": "Avantio X-Avantio-Auth (TEST)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Zip availabilities back to accommodations by item index and\n// collapse to one response payload.\nconst accs = $('One per accommodation').all();\nconst avs = $input.all();\nconst properties = accs.map((a, i) => {\n  const av = avs[i]?.json ?? {};\n  const isErr = av.statusCode && Number(av.statusCode) >= 400;\n  return {\n    id: a.json.id,\n    name: a.json.name,\n    data: isErr ? [] : (av.data ?? av.seasons ?? av),\n    error: isErr ? `availabilities ${av.statusCode}` : undefined,\n  };\n});\nreturn [{ json: { properties } }];"
+      },
+      "id": "aggregate",
+      "name": "Aggregate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1100, 0]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Avantio: list accommodations", "type": "main", "index": 0 }]] },
+    "Avantio: list accommodations": { "main": [[{ "node": "One per accommodation", "type": "main", "index": 0 }]] },
+    "One per accommodation": { "main": [[{ "node": "Avantio: get availabilities", "type": "main", "index": 0 }]] },
+    "Avantio: get availabilities": { "main": [[{ "node": "Aggregate", "type": "main", "index": 0 }]] },
+    "Aggregate": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
