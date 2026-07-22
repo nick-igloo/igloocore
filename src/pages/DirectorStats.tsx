@@ -16,92 +16,14 @@ import { computeDirectorStats, DirectorStats as Stats } from '../lib/statsEngine
 const formatCurrency = (n: number) => '£' + Math.round(n).toLocaleString('en-GB');
 const formatNumber = (n: number) => n.toLocaleString('en-GB');
 
-export default function DirectorStats() {
-  const [rows, setRows] = useState<Record<string, unknown>[] | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [showAllProps, setShowAllProps] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const all: Record<string, unknown>[] = [];
-      const PAGE = 1000;
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await supabase
-          .from('property_bookings_cache')
-          .select('raw')
-          .not('raw', 'is', null)
-          .range(from, from + PAGE - 1);
-        if (cancelled) return;
-        if (error) { setErr(error.message); return; }
-        const chunk = ((data || []) as { raw: Record<string, unknown> }[]).map(d => d.raw);
-        all.push(...chunk);
-        if (chunk.length < PAGE) break;
-      }
-      setRows(all);
-    })();
-    return () => { cancelled = true; };
-  }, [refreshKey]);
-
-  const stats: Stats | null = useMemo(
-    () => (rows && rows.length ? computeDirectorStats(rows) : null),
-    [rows],
-  );
-
-  if (err) {
-    return <div className="p-10 text-red-700">Couldn't load bookings: {err}</div>;
-  }
-  if (!rows) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="inline-block w-16 h-16 border-4 border-[#003366] border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-[#003366] font-bold">Loading Dashboard...</p>
-        </div>
-      </div>
-    );
-  }
-  if (!stats) {
-    return (
-      <div className="p-10 max-w-xl">
-        <h1 className="text-2xl font-bold text-[#003366] mb-2">Executive Dashboard</h1>
-        <p className="text-slate-500 text-sm">
-          No synced bookings yet — once the Avantio source-of-truth sync has run,
-          the full year view appears here automatically.
-        </p>
-      </div>
-    );
-  }
-
+function DashboardView({ stats, heroLabel }: { stats: Stats; heroLabel: string }) {
   const chartData = stats.performanceTable.map(r => ({ month: r.month, value: r.bookingValue }));
   const heroCommission = stats.totalCommission;
   const occCurrent = stats.occupancyCurrent;
   const occPace = stats.occupancyPace;
   const occDiff = occCurrent - occPace;
-  const propsShown = showAllProps ? stats.propertyStats : stats.propertyStats.slice(0, 12);
-
   return (
-    <div className="min-h-screen bg-white font-sans text-slate-900">
-      <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="sticky top-0 z-40 backdrop-blur-md bg-white/90 border-b border-slate-200 py-4 px-6">
-        <div className="max-w-7xl mx-auto flex items-end justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-[#003366]">Executive Dashboard</h1>
-            <p className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">
-              Live Pacing Analysis · {formatNumber(stats.bookingsProcessed)} bookings · straight from the Avantio feed
-            </p>
-          </div>
-          <button
-            onClick={() => { setRows(null); setRefreshKey(k => k + 1); }}
-            className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-[#003366] transition-colors"
-          >
-            <RefreshCw className="w-3.5 h-3.5" /> Refresh
-          </button>
-        </div>
-      </motion.div>
-
-      <div className="max-w-7xl mx-auto px-6 py-8">
-
+    <>
         {/* HERO CARD */}
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
@@ -117,7 +39,7 @@ export default function DirectorStats() {
           <div className="relative z-10">
             <div className="flex items-center gap-3 mb-4 text-white/70">
               <TrendingUp className="w-6 h-6" />
-              <span className="text-xs font-bold tracking-widest uppercase">Total {stats.targetYear} Management Commission</span>
+              <span className="text-xs font-bold tracking-widest uppercase">{heroLabel}</span>
             </div>
             <div className="font-mono-numbers text-7xl md:text-8xl font-bold text-white tracking-tighter">
               <CountUp end={heroCommission} prefix="£" decimals={0} />
@@ -250,7 +172,132 @@ export default function DirectorStats() {
           </div>
         </div>
 
-        {/* PROPERTY BREAKDOWN */}
+    </>
+  );
+}
+
+export default function DirectorStats() {
+  const [rows, setRows] = useState<Record<string, unknown>[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [showAllProps, setShowAllProps] = useState(false);
+  const [tab, setTab] = useState<'portfolio' | 'properties'>('portfolio');
+  const [selectedProp, setSelectedProp] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const all: Record<string, unknown>[] = [];
+      const PAGE = 1000;
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from('property_bookings_cache')
+          .select('raw')
+          .not('raw', 'is', null)
+          .range(from, from + PAGE - 1);
+        if (cancelled) return;
+        if (error) { setErr(error.message); return; }
+        const chunk = ((data || []) as { raw: Record<string, unknown> }[]).map(d => d.raw);
+        all.push(...chunk);
+        if (chunk.length < PAGE) break;
+      }
+      setRows(all);
+    })();
+    return () => { cancelled = true; };
+  }, [refreshKey]);
+
+  const stats: Stats | null = useMemo(
+    () => (rows && rows.length ? computeDirectorStats(rows) : null),
+    [rows],
+  );
+
+  const propStats: Stats | null = useMemo(() => {
+    if (!rows || !selectedProp) return null;
+    const filtered = rows.filter(r =>
+      String(r['Property name'] || r['Property ID'] || 'Unknown Property') === selectedProp);
+    return filtered.length ? computeDirectorStats(filtered) : null;
+  }, [rows, selectedProp]);
+
+  if (err) {
+    return <div className="p-10 text-red-700">Couldn't load bookings: {err}</div>;
+  }
+  if (!rows) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center bg-white">
+        <div className="text-center">
+          <div className="inline-block w-16 h-16 border-4 border-[#003366] border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-[#003366] font-bold">Loading Dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+  if (!stats) {
+    return (
+      <div className="p-10 max-w-xl">
+        <h1 className="text-2xl font-bold text-[#003366] mb-2">Executive Dashboard</h1>
+        <p className="text-slate-500 text-sm">
+          No synced bookings yet — once the Avantio source-of-truth sync has run,
+          the full year view appears here automatically.
+        </p>
+      </div>
+    );
+  }
+
+  const propsShown = showAllProps ? stats.propertyStats : stats.propertyStats.slice(0, 12);
+
+  return (
+    <div className="min-h-screen bg-white font-sans text-slate-900">
+      <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="sticky top-0 z-40 backdrop-blur-md bg-white/90 border-b border-slate-200 py-4 px-6">
+        <div className="max-w-7xl mx-auto flex items-end justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-[#003366]">Executive Dashboard</h1>
+            <p className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">
+              Live Pacing Analysis · {formatNumber(stats.bookingsProcessed)} bookings · straight from the Avantio feed
+            </p>
+          </div>
+          <button
+            onClick={() => { setRows(null); setRefreshKey(k => k + 1); }}
+            className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-[#003366] transition-colors"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </button>
+        </div>
+      </motion.div>
+
+      <div className="max-w-7xl mx-auto px-6 py-8">
+
+        {/* TABS */}
+        <div className="flex gap-2 mb-8">
+          {([['portfolio', 'Portfolio'], ['properties', 'Properties']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => { setTab(key); if (key === 'portfolio') setSelectedProp(null); }}
+              className={`px-5 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-colors ${
+                tab === key ? 'bg-[#003366] text-white shadow' : 'bg-slate-100 text-slate-500 hover:text-[#003366]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'portfolio' && (
+          <DashboardView stats={stats} heroLabel={`Total ${stats.targetYear} Management Commission`} />
+        )}
+
+        {tab === 'properties' && selectedProp && propStats && (
+          <>
+            <button
+              onClick={() => setSelectedProp(null)}
+              className="mb-6 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-[#003366] transition-colors"
+            >
+              ← All properties
+            </button>
+            <DashboardView stats={propStats} heroLabel={`${selectedProp} — ${propStats.targetYear} Commission`} />
+          </>
+        )}
+
+        {tab === 'properties' && !selectedProp && (
         <div className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden">
           <div className="p-6 border-b border-slate-100 bg-slate-50/50">
             <h2 className="text-sm font-black text-[#003366] uppercase tracking-widest">Property Breakdown — {stats.targetYear} by Revenue</h2>
@@ -268,7 +315,7 @@ export default function DirectorStats() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {propsShown.map(p => (
-                  <tr key={p.name} className="hover:bg-slate-50 transition-colors">
+                  <tr key={p.name} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setSelectedProp(p.name)}>
                     <td className="py-3.5 px-8 font-bold text-[#003366]">{p.name}</td>
                     <td className="py-3.5 px-8 text-right font-mono-numbers text-slate-500">{formatNumber(p.bookings)}</td>
                     <td className="py-3.5 px-8 text-right font-mono-numbers text-slate-500">{formatNumber(p.nights)}</td>
@@ -288,6 +335,7 @@ export default function DirectorStats() {
             </button>
           )}
         </div>
+        )}
 
       </div>
     </div>
