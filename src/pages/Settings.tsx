@@ -4,14 +4,12 @@ import {
   ArrowLeft,
   Home,
   Users,
-  Sparkles,
   Landmark,
   BadgePoundSterling,
   Save,
   Loader2,
   CheckCircle2,
   AlertCircle,
-  ExternalLink,
   Search,
   Shield,
   PackagePlus,
@@ -33,7 +31,6 @@ import OnboardingPage from './OnboardingPage';
 type TabKey =
   | 'properties'
   | 'owners'
-  | 'cleaners'
   | 'bank'
   | 'pricing'
   | 'access'
@@ -49,7 +46,6 @@ interface Tab {
 const TABS: Tab[] = [
   { key: 'properties', label: 'Properties', icon: Home, blurb: 'Names, cleaners, prices, welcome packs, rules' },
   { key: 'owners', label: 'Owners', icon: Users, blurb: 'Owner accounts, approvals, portal access' },
-  { key: 'cleaners', label: 'Cleaners', icon: Sparkles, blurb: 'Cleaner profiles and property assignments' },
   { key: 'bank', label: 'Bank & Mapping', icon: Landmark, blurb: 'Owner bank details and property mapping' },
   { key: 'pricing', label: 'Pricing', icon: BadgePoundSterling, blurb: 'Welcome pack prices and settlement defaults' },
   { key: 'access', label: 'User Access', icon: Shield, blurb: 'Director accounts and project permissions' },
@@ -62,7 +58,7 @@ interface TabGroup {
 }
 
 const TAB_GROUPS: TabGroup[] = [
-  { label: 'Portfolio', keys: ['properties', 'owners', 'cleaners'] },
+  { label: 'Portfolio', keys: ['properties', 'owners'] },
   { label: 'Money', keys: ['bank', 'pricing'] },
   { label: 'System', keys: ['access', 'setup'] },
 ];
@@ -135,7 +131,6 @@ export default function Settings() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {tab === 'properties' && <PropertiesTab />}
         {tab === 'owners' && <OwnerManagement />}
-        {tab === 'cleaners' && <CleanersTab />}
         {tab === 'bank' && <BankTab />}
         {tab === 'pricing' && <PricingTab />}
         {tab === 'access' && <DirectorAccess />}
@@ -392,19 +387,6 @@ function PropertiesTab() {
   );
 }
 
-// ─── Cleaners Tab ────────────────────────────────────────────────────────────
-
-function CleanersTab() {
-  return (
-    <LinkOutCard
-      title="Cleaners & Assignments"
-      description="Manage cleaner accounts and assign them to properties. Cleaner names shown on the Properties tab should match full names here."
-      href="/cleaner-management"
-      cta="Open Cleaner Management"
-    />
-  );
-}
-
 // ─── Bank Tab ────────────────────────────────────────────────────────────────
 
 function BankTab() {
@@ -541,20 +523,4 @@ function PricingTab() {
   );
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function LinkOutCard({ title, description, href, cta }: { title: string; description: string; href: string; cta: string }) {
-  return (
-    <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-      <h2 className="text-lg font-bold text-slate-900">{title}</h2>
-      <p className="text-sm text-slate-500 mt-1">{description}</p>
-      <Link
-        to={href}
-        className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-      >
-        <ExternalLink className="w-4 h-4" />
-        {cta}
-      </Link>
-    </section>
-  );
-}
