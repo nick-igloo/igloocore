@@ -37,7 +37,7 @@
             },
             {
               "name": "pagination_size",
-              "value": "100"
+              "value": "50"
             }
           ]
         },
