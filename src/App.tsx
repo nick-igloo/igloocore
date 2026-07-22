@@ -21,6 +21,7 @@ const DailySafetyChecks = lazy(() => import('./pages/DailySafetyChecks'));
 const Settings = lazy(() => import('./pages/Settings'));
 const DirectorExpenses = lazy(() => import('./pages/DirectorExpenses'));
 const NewPropertyWizard = lazy(() => import('./pages/NewPropertyWizard'));
+const PropertyPublisher = lazy(() => import('./pages/labs/PropertyPublisher'));
 const DriveSync = lazy(() => import('./pages/DriveSync'));
 const WoodlandSafety = lazy(() => import('./pages/WoodlandSafety'));
 
@@ -136,6 +137,7 @@ function App() {
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/onboard-property" element={<NewPropertyWizard />} />
                 <Route path="/drive-sync" element={<DriveSync />} />
+                <Route path="/labs/property-publisher" element={<PropertyPublisher />} />
               </Route>
             </Route>
             {/* Woodland Safety stays login-free: the owner records checks via a

@@ -4,7 +4,7 @@ import { Outlet, NavLink, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Calculator, Activity, TrendingUp, FileText, Receipt, ShieldCheck, Zap,
   Home, FolderSync, Settings as SettingsIcon,
-  BarChart3, Menu, X,
+  BarChart3, Menu, X, FlaskConical,
 } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -44,6 +44,12 @@ const NAV = [
     items: [
       { to: '/reports', label: 'Owner Reports', icon: FileText },
       { to: '/stats', label: 'Director Stats', icon: TrendingUp },
+    ],
+  },
+  {
+    group: 'Labs',
+    items: [
+      { to: '/labs/property-publisher', label: 'Property Publisher', icon: FlaskConical },
     ],
   },
 ];
