@@ -20,22 +20,36 @@ const WEBHOOK_URL =
 
 const BUCKET = 'labs-property-photos';
 
-// Avantio "Upload Image" category enum. KITCHEN is confirmed from the
-// API reference; the other values are collapsed behind "Show 20 enum
-// values" in the docs — read them there and correct this list.
-// ONE place to edit; the AI tagger is constrained to this list too
-// (n8n passes it in the prompt).
+// Avantio "Upload Image" category enum — VERIFIED against the API
+// portal (all 20 values). DINNING_ROOM and COFFE_PLACE are Avantio's
+// own spellings; do not "fix" them or uploads will 400.
 const IMAGE_CATEGORIES = [
-  'KITCHEN', 'BEDROOM', 'BATHROOM', 'LIVING_ROOM', 'DINING_ROOM',
-  'EXTERIOR', 'GARDEN', 'TERRACE', 'VIEWS', 'POOL', 'ENTRANCE',
-  'HALLWAY', 'BALCONY', 'PARKING', 'SURROUNDINGS', 'FACADE',
-  'DETAIL', 'PLAN', 'GENERAL', 'OTHER',
+  'KITCHEN', 'FRONT', 'BEDROOM', 'BATHROOM', 'GARDEN', 'SWIMMING_POOL',
+  'TERRACE', 'GARAGE', 'EXTERIOR', 'DETAILS', 'OTHERS', 'LIVING_ROOM',
+  'RECEPTION', 'BALCONY', 'DINNING_ROOM', 'COFFE_PLACE', 'VIEWS',
+  'PROPERTY_FLOOR_PLANS', 'RESORT', 'CHILDRENS_ROOM',
 ];
 
-// Avantio accommodation type enum ("Show 30 enum values" in docs —
-// APARTMENT confirmed as the example; verify and extend as needed).
+// Display-only labels: correct spelling on screen, Avantio's exact
+// enum value on the wire.
+const CATEGORY_LABELS: Record<string, string> = {
+  DINNING_ROOM: 'Dining room',
+  COFFE_PLACE: 'Coffee place',
+};
+const categoryLabel = (c: string) =>
+  CATEGORY_LABELS[c] ||
+  (c.charAt(0) + c.slice(1).toLowerCase()).replace(/_/g, ' ');
+
+// Avantio accommodation type enum — VERIFIED against the API portal
+// (all 30 values). Ordered Igloo-relevant first; GARAGE/PARKING's
+// slash is Avantio's exact value.
 const ACCOMMODATION_TYPES = [
-  'APARTMENT', 'HOUSE', 'VILLA', 'COTTAGE', 'CHALET', 'STUDIO', 'BUNGALOW',
+  'HOUSE', 'COTTAGE', 'CHALET', 'BUNGALOW', 'COUNTRY_HOUSE', 'APARTMENT',
+  'FLAT', 'STUDIO', 'TOWNHOUSE', 'SEMI_DETACHED_HOUSE', 'PENTHOUSE',
+  'CONDOMINIUM', 'VILLA', 'FARM_STAY', 'RESORT', 'HOTEL', 'APARTHOTEL',
+  'RENT_BY_ROOM', 'MOBILE_HOME', 'BOAT', 'MOORING', 'PLOT', 'BOXROOM',
+  'GARAGE/PARKING', 'BRAND_NEW_BUILDING', 'COMMERCIAL_SPACE',
+  'INDUSTRIAL_PREMISE', 'BUSINESS_LEASE_TRANSFER', 'EXCHANGE', 'TRULLO',
 ];
 
 // Avantio Upload Image accepts these MIME types, 50 KB – 11 MB.
@@ -339,7 +353,7 @@ export default function PropertyPublisher() {
               onBlur={saveDetails}
               className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-blue-500 mb-3"
             >
-              {ACCOMMODATION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              {ACCOMMODATION_TYPES.map(t => <option key={t} value={t}>{categoryLabel(t)}</option>)}
             </select>
             <label className="block text-xs font-semibold text-slate-500 mb-1">City</label>
             <input
@@ -441,7 +455,7 @@ export default function PropertyPublisher() {
                       }`}
                     >
                       <option value="">Category…</option>
-                      {IMAGE_CATEGORIES.map(c => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
+                      {IMAGE_CATEGORIES.map(c => <option key={c} value={c}>{categoryLabel(c)}</option>)}
                     </select>
                     <button onClick={() => move(im, -1)} disabled={idx === 0}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30" title="Move up">
@@ -459,8 +473,9 @@ export default function PropertyPublisher() {
                   <textarea
                     value={im.description || ''}
                     onChange={e => patchImage(im.id, { description: e.target.value })}
-                    placeholder="Description (AI can write this)"
+                    placeholder="Description (AI can write this — required to publish)"
                     rows={2}
+                    maxLength={700}
                     className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 resize-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>

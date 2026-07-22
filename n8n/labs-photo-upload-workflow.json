@@ -183,7 +183,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  category: $json.category,\n  name: $json.name,\n  order: $json.order,\n  url: $json.url,\n  description: [{ languageCode: 'en', text: $json.description || '' }]\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  category: $json.category,\n  name: $json.name,\n  order: $json.order,\n  url: $json.url,\n  description: [{ language: 'en_GB', text: ($json.description || $json.name || 'Property photo').slice(0, 700) }]\n}) }}",
         "options": {}
       },
       "id": "avantio-upload-image",

@@ -41,23 +41,20 @@ n8n. Zero frontend changes.
 3. **Netlify (optional)** — `VITE_N8N_LABS_WEBHOOK_URL` overrides the default
    webhook URL baked into the page.
 
-## Things to verify against the Avantio docs
+## Verified against the API portal
 
-Two enum lists are collapsed in the API reference PDF ("Show 20/30 enum
-values") so the exact values couldn't be read out:
+- **Image categories** — all 20 enum values confirmed (note Avantio's own
+  spellings `DINNING_ROOM` and `COFFE_PLACE`; the code preserves them on the
+  wire and corrects them in the UI only).
+- **Accommodation types** — all 30 enum values confirmed (incl.
+  `GARAGE/PARKING` with a slash).
+- **Image description shape** — `[{ language: 'en_GB', text: '...' }]`,
+  required, text ≤ 700 chars. The workflow falls back to the image name if no
+  description was written, and truncates to 700.
 
-- **Image categories** (`IMAGE_CATEGORIES` in
-  `src/pages/labs/PropertyPublisher.tsx`) — KITCHEN is confirmed; the other 19
-  are educated guesses. Open Upload Image in the API portal, expand the enum,
-  and correct the list. It's the single source of truth: the UI dropdown and
-  the AI tagger prompt both read from it.
-- **Accommodation types** (`ACCOMMODATION_TYPES`, same file) — APARTMENT
-  confirmed; expand the enum on Create Accommodation and correct.
-
-Also check the **localized description shape** on Upload Image — the workflow
-sends `[{ languageCode: 'en', text: ... }]`; the PDF shows it's an "array of
-objects" but the field names are collapsed. A 400 from the sandbox will state
-the expected shape; adjust the `Avantio: upload image` node body to match.
+Still unverified: the **LOCATION OBJECT** on Create Accommodation beyond
+`countryCode` (the UI's city field is currently display-only until the field
+name is confirmed).
 
 ## Swapping to live later
 
