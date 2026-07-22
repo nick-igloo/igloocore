@@ -190,7 +190,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ name: $('Webhook').first().json.body.gallery.name }) }}",
+        "jsonBody": "={{ JSON.stringify({\n  name: $('Webhook').first().json.body.gallery.name,\n  images: $('Webhook').first().json.body.images.map(im => ({\n    category: im.category,\n    name: im.name,\n    order: im.order,\n    url: im.url,\n    description: [{ language: 'en_GB', text: (im.description || im.name || 'Property photo').slice(0, 700) }]\n  }))\n}) }}",
         "options": {}
       },
       "id": "avantio-create-gallery",
@@ -199,58 +199,6 @@
       "typeVersion": 4.2,
       "position": [
         700,
-        140
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "REPLACE_WITH_AVANTIO_TEST_CRED",
-          "name": "Avantio X-Avantio-Auth (TEST)"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Fan out: one item per image, carrying accommodation + gallery ids.\n// Avantio wraps responses in a data envelope.\nconst req = $('Webhook').first().json.body;\nconst accommodationId = $('Avantio: create accommodation').first().json.data.id;\nconst galleryId = $json.data?.id ?? $json.id;\nreturn req.images.map(im => ({ json: { ...im, accommodationId, galleryId } }));"
-      },
-      "id": "fan-out-images",
-      "name": "One item per image",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        940,
-        140
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "=https://api.avantio.pro/pms/v2/accommodations/{{ $json.accommodationId }}/gallery/{{ $json.galleryId }}/images",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "accept",
-              "value": "application/json"
-            },
-            {
-              "name": "content-type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  category: $json.category,\n  name: $json.name,\n  order: $json.order,\n  url: $json.url,\n  description: [{ language: 'en_GB', text: ($json.description || $json.name || 'Property photo').slice(0, 700) }]\n}) }}",
-        "options": {}
-      },
-      "id": "avantio-upload-image",
-      "name": "Avantio: upload image (URL pull)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1180,
         140
       ],
       "credentials": {
@@ -514,28 +462,6 @@
       ]
     },
     "Avantio: create gallery": {
-      "main": [
-        [
-          {
-            "node": "One item per image",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "One item per image": {
-      "main": [
-        [
-          {
-            "node": "Avantio: upload image (URL pull)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Avantio: upload image (URL pull)": {
       "main": [
         [
           {
