@@ -1,0 +1,109 @@
+{
+  "name": "Labs · Booking Calendar",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "booking-calendar",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://hq.igloo.scot"
+        }
+      },
+      "id": "webhook-in",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://api.avantio.pro/pms/v2/bookings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "departureDate_from", "value": "={{ $json.body.from }}" },
+            { "name": "arrivalDate_to", "value": "={{ $json.body.to }}" },
+            { "name": "pagination_size", "value": "100" },
+            { "name": "sort", "value": "arrivalDate,asc" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "accept", "value": "application/json" }]
+        },
+        "options": {}
+      },
+      "id": "list-bookings",
+      "name": "Avantio: list bookings (month overlap)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, -80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_AVANTIO_TEST_CRED",
+          "name": "Avantio X-Avantio-Auth (TEST)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.avantio.pro/pms/v2/accommodations",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "pagination_size", "value": "100" }]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "accept", "value": "application/json" }]
+        },
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "id": "list-accommodations",
+      "name": "Avantio: list accommodations (names)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, -80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_AVANTIO_TEST_CRED",
+          "name": "Avantio X-Avantio-Auth (TEST)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine bookings + accommodation names into one payload.\nconst bookings = $('Avantio: list bookings (month overlap)').first().json.data || [];\nconst accsRaw = $json.data || [];\nconst accommodations = accsRaw.map(a => ({ id: String(a.id), name: a.name || String(a.id) }));\nreturn [{ json: { bookings, accommodations } }];"
+      },
+      "id": "combine",
+      "name": "Combine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, -80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [880, -80]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Avantio: list bookings (month overlap)", "type": "main", "index": 0 }]] },
+    "Avantio: list bookings (month overlap)": { "main": [[{ "node": "Avantio: list accommodations (names)", "type": "main", "index": 0 }]] },
+    "Avantio: list accommodations (names)": { "main": [[{ "node": "Combine", "type": "main", "index": 0 }]] },
+    "Combine": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
