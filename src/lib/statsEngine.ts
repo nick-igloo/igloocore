@@ -9,6 +9,7 @@
 export interface PulseStat { count: number; bookingValue: number; ourCommission: number; }
 export interface PerformanceRow {
   month: string; count: number; bookingValue: number; ourCommission: number;
+  ownerValue: number; ownerValueLast: number;
   occupancy: number; pacingOcc: number; finalOccLast: number;
   pacingStatus: 'ahead' | 'behind' | 'neutral';
 }
@@ -20,6 +21,7 @@ export interface DirectorStats {
   pulse24h: PulseStat; pulse7d: PulseStat; pulse30d: PulseStat;
   occupancyCurrent: number; occupancyPace: number; occupancyStatus: 'ahead' | 'behind';
   totalRevenue: number; totalCommission: number;
+  totalOwnerValue: number; totalOwnerValueLast: number;
   performanceTable: PerformanceRow[];
   propertyStats: PropertyStat[];
   bookingsProcessed: number;
@@ -53,9 +55,9 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
   const targetYear = now.getFullYear();
   const compYear = targetYear - 1;
 
-  const statsCurrentYear = Array.from({ length: 12 }, () => ({ revenue: 0, commission: 0, count: 0, soldNights: 0 }));
+  const statsCurrentYear = Array.from({ length: 12 }, () => ({ revenue: 0, commission: 0, ownerValue: 0, count: 0, soldNights: 0 }));
   const statsLastYearPace = Array.from({ length: 12 }, () => ({ soldNights: 0 }));
-  const statsLastYearFinal = Array.from({ length: 12 }, () => ({ soldNights: 0 }));
+  const statsLastYearFinal = Array.from({ length: 12 }, () => ({ soldNights: 0, ownerValue: 0, revenue: 0 }));
 
   const propertyMap = new Map<string, PropertyStat>();
   const propertyFirstSeen = new Map<string, Date>();
@@ -86,6 +88,12 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
     const totalVal = toNum(row['Booking total with tax']);
     const portalFee = toNum(row['Portal/Intermediary Commission: calculated commission']);
     const commission = (totalVal - portalFee) * COMM_RATE * VAT_RATE;
+    // Owner's share: total minus channel commission, management commission,
+    // and extras/booking fees (which are Igloo revenue, not the owner's)
+    const extrasVal = row['Extras with VAT on top'] !== undefined && row['Extras with VAT on top'] !== ''
+      ? toNum(row['Extras with VAT on top'])
+      : toNum(row['Extras without VAT']);
+    const ownerValue = totalVal - portalFee - commission - extrasVal;
 
     if (pid && checkIn) {
       const cur = propertyFirstSeen.get(pid);
@@ -110,10 +118,16 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
       const m = checkOut.getMonth();
       statsCurrentYear[m].revenue += totalVal;
       statsCurrentYear[m].commission += commission;
+      statsCurrentYear[m].ownerValue += ownerValue;
       statsCurrentYear[m].count += 1;
       pStats.revenue += totalVal;
       pStats.commission += commission;
       pStats.bookings += 1;
+    }
+    if (checkOut && checkOut.getFullYear() === compYear) {
+      const m = checkOut.getMonth();
+      statsLastYearFinal[m].ownerValue += ownerValue;
+      statsLastYearFinal[m].revenue += totalVal;
     }
 
     if (checkIn && nights > 0) {
@@ -166,6 +180,8 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
       count: stat.count,
       bookingValue: stat.revenue,
       ourCommission: stat.commission,
+      ownerValue: stat.ownerValue,
+      ownerValueLast: statsLastYearFinal[index].ownerValue,
       occupancy: occCurrent,
       pacingOcc: occLastPace,
       finalOccLast: occLastFinal,
@@ -190,6 +206,8 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
     occupancyStatus: aggOccCur >= aggPaceLast ? 'ahead' : 'behind',
     totalRevenue: performanceTable.reduce((a, m) => a + m.bookingValue, 0),
     totalCommission: performanceTable.reduce((a, m) => a + m.ourCommission, 0),
+    totalOwnerValue: performanceTable.reduce((a, m) => a + m.ownerValue, 0),
+    totalOwnerValueLast: performanceTable.reduce((a, m) => a + m.ownerValueLast, 0),
     performanceTable,
     propertyStats,
     bookingsProcessed: processedIds.size,

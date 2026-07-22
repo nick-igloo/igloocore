@@ -16,7 +16,7 @@ import { computeDirectorStats, DirectorStats as Stats } from '../lib/statsEngine
 const formatCurrency = (n: number) => '£' + Math.round(n).toLocaleString('en-GB');
 const formatNumber = (n: number) => n.toLocaleString('en-GB');
 
-function DashboardView({ stats, heroLabel }: { stats: Stats; heroLabel: string }) {
+function DashboardView({ stats, heroLabel, showOwner = false }: { stats: Stats; heroLabel: string; showOwner?: boolean }) {
   const chartData = stats.performanceTable.map(r => ({ month: r.month, value: r.bookingValue }));
   const heroCommission = stats.totalCommission;
   const occCurrent = stats.occupancyCurrent;
@@ -46,6 +46,38 @@ function DashboardView({ stats, heroLabel }: { stats: Stats; heroLabel: string }
             </div>
           </div>
         </motion.div>
+
+
+        {/* OWNER VALUE (property view) */}
+        {showOwner && (() => {
+          const cur = stats.totalOwnerValue;
+          const last = stats.totalOwnerValueLast;
+          const delta = last > 0 ? ((cur - last) / last) * 100 : 0;
+          const ahead = cur >= last;
+          return (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-10 flex flex-wrap items-center gap-8">
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Owner Booking Value {stats.targetYear}</p>
+                <p className="text-4xl font-bold text-[#003366] font-mono-numbers tracking-tighter">
+                  <CountUp end={cur} prefix="£" decimals={0} />
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">{stats.compYear} Actual</p>
+                <p className="text-2xl font-bold text-slate-400 font-mono-numbers">{formatCurrency(last)}</p>
+              </div>
+              {last > 0 && (
+                <span className={`px-2 py-1 rounded text-[10px] font-black uppercase flex items-center gap-1 ${ahead ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                  {ahead ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+                  {Math.abs(delta).toFixed(1)}% vs {stats.compYear}
+                </span>
+              )}
+              <div className="flex-1 text-right text-[10px] text-slate-400 uppercase font-bold tracking-widest">
+                Total − channel commission − management commission − extras
+              </div>
+            </div>
+          );
+        })()}
 
         {/* PULSE GRID */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
@@ -122,6 +154,7 @@ function DashboardView({ stats, heroLabel }: { stats: Stats; heroLabel: string }
                   <th className="text-left py-4 px-8">Month</th>
                   <th className="text-right py-4 px-8">Check-outs</th>
                   <th className="text-right py-4 px-8">Revenue</th>
+                  {showOwner && <th className="text-right py-4 px-8">Owner Value</th>}
                   <th className="text-left py-4 px-8 min-w-[320px]">Occupancy Pacing</th>
                   <th className="text-right py-4 px-8 text-[#003366]">Commission</th>
                 </tr>
@@ -139,6 +172,12 @@ function DashboardView({ stats, heroLabel }: { stats: Stats; heroLabel: string }
                       <td className="py-4 px-8 font-bold text-[#003366]">{row.month}</td>
                       <td className="py-4 px-8 text-right font-mono-numbers text-slate-500">{formatNumber(row.count)}</td>
                       <td className="py-4 px-8 text-right font-mono-numbers font-medium">{formatCurrency(row.bookingValue)}</td>
+                      {showOwner && (
+                        <td className="py-4 px-8 text-right font-mono-numbers">
+                          <div className="font-bold text-slate-700">{formatCurrency(row.ownerValue)}</div>
+                          <div className="text-[10px] text-slate-400">{row.ownerValueLast > 0 ? `LY ${formatCurrency(row.ownerValueLast)}` : '—'}</div>
+                        </td>
+                      )}
                       <td className="py-4 px-8">
                         <div className="flex items-center gap-6">
                           <div className="flex-1 space-y-2 relative">
@@ -293,7 +332,7 @@ export default function DirectorStats() {
             >
               ← All properties
             </button>
-            <DashboardView stats={propStats} heroLabel={`${selectedProp} — ${propStats.targetYear} Commission`} />
+            <DashboardView stats={propStats} heroLabel={`${selectedProp} — ${propStats.targetYear} Commission`} showOwner />
           </>
         )}
 
@@ -310,6 +349,7 @@ export default function DirectorStats() {
                   <th className="text-right py-4 px-8">Bookings</th>
                   <th className="text-right py-4 px-8">Nights</th>
                   <th className="text-right py-4 px-8">Revenue</th>
+                  {showOwner && <th className="text-right py-4 px-8">Owner Value</th>}
                   <th className="text-right py-4 px-8 text-[#003366]">Commission</th>
                 </tr>
               </thead>
