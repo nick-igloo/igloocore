@@ -206,6 +206,7 @@ function App() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/onboard-property" element={<NewPropertyWizard />} />
               <Route path="/drive-sync" element={<DriveSync />} />
+              <Route path="/labs/property-publisher" element={<PropertyPublisher />} />
             </Route>
           </Route>
           {/* Woodland Safety stays login-free (owner link; anon RLS scoped) */}
