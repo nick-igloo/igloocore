@@ -157,12 +157,21 @@ function BookingProcessor() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
-        .from('property_bookings_cache')
-        .select('raw')
-        .not('raw', 'is', null);
-      if (cancelled || error || !data?.length) return;
-      const bookings = (data as any[]).map(d => d.raw as BookingRecord)
+      // Paginate past Supabase's 1000-row cap — the SoT holds ~3k bookings
+      const all: any[] = [];
+      const PAGE = 1000;
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from('property_bookings_cache')
+          .select('raw')
+          .not('raw', 'is', null)
+          .range(from, from + PAGE - 1);
+        if (cancelled || error) return;
+        all.push(...(data || []));
+        if (!data || data.length < PAGE) break;
+      }
+      if (!all.length) return;
+      const bookings = all.map(d => d.raw as BookingRecord)
         .filter(b => b && b['Booking number']);
       if (!bookings.length) return;
       setAll(bookings);
