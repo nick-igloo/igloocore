@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  TrendingUp, Building2, ArrowUp, ArrowDown, Ticket, RefreshCw,
+  TrendingUp, Building2, ArrowUp, ArrowDown, Ticket, RefreshCw, Sparkles, Lightbulb, CheckCircle2,
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { supabase } from '../lib/supabase';
@@ -220,8 +220,34 @@ export default function DirectorStats() {
   const [err, setErr] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAllProps, setShowAllProps] = useState(false);
-  const [tab, setTab] = useState<'portfolio' | 'properties'>('portfolio');
+  const [tab, setTab] = useState<'portfolio' | 'properties' | 'insights'>('portfolio');
   const [selectedProp, setSelectedProp] = useState<string | null>(null);
+  const [insights, setInsights] = useState<{ headline: string; insights: { title: string; body: string }[]; actions: string[] } | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsErr, setInsightsErr] = useState<string | null>(null);
+
+  const generateInsights = async () => {
+    if (!stats) return;
+    setInsightsLoading(true); setInsightsErr(null);
+    try {
+      const payload = {
+        year: stats.targetYear, compYear: stats.compYear,
+        occupancy: { current: +stats.occupancyCurrent.toFixed(1), lastYearPace: +stats.occupancyPace.toFixed(1) },
+        totals: { bookingValue: Math.round(stats.totalRevenue), commission: Math.round(stats.totalCommission), ownerValue: Math.round(stats.totalOwnerValue), ownerValueLastYear: Math.round(stats.totalOwnerValueLast) },
+        pulse: { last24h: stats.pulse24h, last7d: stats.pulse7d, last30d: stats.pulse30d },
+        monthly: stats.performanceTable.map(m => ({ month: m.month, bookings: m.count, value: Math.round(m.bookingValue), commission: Math.round(m.ourCommission), occ: +m.occupancy.toFixed(1), pace: +m.pacingOcc.toFixed(1), lastFinal: +m.finalOccLast.toFixed(1), status: m.pacingStatus })),
+        properties: stats.propertyStats.map(p => ({ name: p.name, revenue: Math.round(p.revenue), commission: Math.round(p.commission), bookings: p.bookings, nights: p.nights })),
+      };
+      const { data, error } = await supabase.functions.invoke('stats-insights', { body: payload });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setInsights(data);
+    } catch (e) {
+      setInsightsErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setInsightsLoading(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -307,7 +333,7 @@ export default function DirectorStats() {
 
         {/* TABS */}
         <div className="flex gap-2 mb-8">
-          {([['portfolio', 'Portfolio'], ['properties', 'Properties']] as const).map(([key, label]) => (
+          {([['portfolio', 'Portfolio'], ['properties', 'Properties'], ['insights', 'AI Insights']] as const).map(([key, label]) => (
             <button
               key={key}
               onClick={() => { setTab(key); if (key === 'portfolio') setSelectedProp(null); }}
@@ -374,6 +400,80 @@ export default function DirectorStats() {
             </button>
           )}
         </div>
+        )}
+
+        {tab === 'insights' && (
+          <div>
+            {!insights && !insightsLoading && (
+              <div className="bg-[#003366] rounded-2xl shadow-2xl p-12 text-center">
+                <Sparkles className="w-10 h-10 text-white/60 mx-auto mb-4" />
+                <h2 className="text-white text-xl font-bold mb-2">Ask the numbers what they mean</h2>
+                <p className="text-white/60 text-sm mb-8 max-w-md mx-auto">
+                  Sends the live year view — pacing, pulse and per-property performance — to Claude
+                  for an analyst's read: anomalies, momentum, and where action would pay.
+                </p>
+                <button
+                  onClick={generateInsights}
+                  className="px-8 py-3 bg-white text-[#003366] rounded-lg font-black uppercase tracking-widest text-xs hover:bg-slate-100 transition-colors"
+                >
+                  Generate insights
+                </button>
+                {insightsErr && <p className="text-red-300 text-xs mt-4">{insightsErr}</p>}
+              </div>
+            )}
+
+            {insightsLoading && (
+              <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
+                <div className="inline-block w-12 h-12 border-4 border-[#003366] border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-[#003366] font-bold text-sm">Reading the year…</p>
+              </div>
+            )}
+
+            {insights && !insightsLoading && (
+              <div>
+                <div className="bg-[#003366] rounded-2xl shadow-2xl p-10 mb-8">
+                  <div className="flex items-center gap-3 mb-3 text-white/70">
+                    <Sparkles className="w-5 h-5" />
+                    <span className="text-xs font-bold tracking-widest uppercase">The headline</span>
+                  </div>
+                  <p className="text-white text-2xl font-bold leading-snug">{insights.headline}</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                  {insights.insights.map((ins, i) => (
+                    <div key={i} className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Lightbulb className="w-4 h-4 text-[#003366] opacity-60" />
+                        <h3 className="text-[#003366] font-black text-xs uppercase tracking-widest">{ins.title}</h3>
+                      </div>
+                      <p className="text-slate-600 text-sm leading-relaxed">{ins.body}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden mb-8">
+                  <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+                    <h2 className="text-sm font-black text-[#003366] uppercase tracking-widest">Recommended actions</h2>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {insights.actions.map((a, i) => (
+                      <div key={i} className="flex items-start gap-3 p-5">
+                        <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                        <p className="text-slate-700 text-sm">{a}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={generateInsights}
+                  className="text-xs font-black uppercase tracking-widest text-slate-500 hover:text-[#003366] transition-colors flex items-center gap-2"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Regenerate
+                </button>
+              </div>
+            )}
+          </div>
         )}
 
       </div>
