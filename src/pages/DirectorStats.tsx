@@ -349,7 +349,6 @@ export default function DirectorStats() {
                   <th className="text-right py-4 px-8">Bookings</th>
                   <th className="text-right py-4 px-8">Nights</th>
                   <th className="text-right py-4 px-8">Revenue</th>
-                  {showOwner && <th className="text-right py-4 px-8">Owner Value</th>}
                   <th className="text-right py-4 px-8 text-[#003366]">Commission</th>
                 </tr>
               </thead>
