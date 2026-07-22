@@ -271,7 +271,35 @@ export default function PropertyPublisher() {
         const body = await res.text();
         throw new Error(`Publish failed (${res.status}): ${body.slice(0, 300)}`);
       }
-      const data = await res.json();
+      // The publish chain is long (Avantio pulls every image, Drive mirrors
+      // them) — the HTTP response can time out or arrive empty even when the
+      // workflow completes. Response parsing is best-effort; Supabase is the
+      // source of truth (n8n marks the draft published at the end).
+      let data: { accommodationId?: string; galleryId?: string; driveFolderUrl?: string } | null = null;
+      try { data = await res.json(); } catch { /* empty body — fall through to polling */ }
+
+      if (!data?.accommodationId) {
+        for (let i = 0; i < 60; i++) { // up to 3 minutes
+          await new Promise(r => setTimeout(r, 3000));
+          const { data: row } = await supabase
+            .from('labs_property_drafts')
+            .select('status, avantio_accommodation_id, avantio_gallery_id, drive_folder_url, error_message')
+            .eq('id', draftId)
+            .single();
+          if (row?.status === 'published') {
+            data = {
+              accommodationId: row.avantio_accommodation_id || undefined,
+              galleryId: row.avantio_gallery_id || undefined,
+              driveFolderUrl: row.drive_folder_url || undefined,
+            };
+            break;
+          }
+          if (row?.status === 'error') throw new Error(row.error_message || 'Publish failed in n8n');
+        }
+        if (!data?.accommodationId) {
+          throw new Error('No confirmation after 3 minutes — check the n8n execution log; the publish may still have completed.');
+        }
+      }
       setPublishResult({
         accommodationId: data.accommodationId,
         galleryId: data.galleryId,
