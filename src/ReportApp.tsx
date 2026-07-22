@@ -1,11 +1,12 @@
 import { useState, useRef } from 'react';
-import { Upload, Download, FileText, CheckCircle2, Loader2, FileSpreadsheet, Mail, Calendar, ArrowLeft, Cloud, ChevronDown } from 'lucide-react';
+import { Upload, Download, FileText, CheckCircle2, Loader2, FileSpreadsheet, Mail, Calendar, ArrowLeft, Cloud, ChevronDown, Archive, FilePlus2 } from 'lucide-react';
 import { PropertyReport, DateRangeFilter, FinancialYear } from './types';
 import { processCSV, generateCSV, downloadCSV } from './csvProcessor';
 import { generateZip, downloadZip } from './zipGenerator';
 import { generateHTML, generateCoverLetter, downloadHTML } from './htmlGenerator';
 import { storeReportFiles } from './lib/reportStorage';
 import { supabase } from './lib/supabase';
+import { AdminReports } from './components/AdminReports';
 
 function buildFinancialYears(): FinancialYear[] {
   const years: FinancialYear[] = [];
@@ -33,6 +34,7 @@ function getDefaultFinancialYear(): FinancialYear {
 }
 
 function ReportApp() {
+  const [view, setView] = useState<'generate' | 'archive'>('generate');
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -173,11 +175,36 @@ function ReportApp() {
           </a>
           <div className="h-4 w-px bg-slate-300" />
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">Property Booking Report Splitter</h1>
-            <p className="text-slate-500 text-sm">Upload your booking CSV to generate individual property reports</p>
+            <h1 className="text-2xl font-bold text-slate-800">Owner Reports</h1>
+            <p className="text-slate-500 text-sm">Generate booking reports and letters, or browse everything saved to the archive</p>
           </div>
         </div>
 
+        <div className="flex gap-1 mb-8 bg-white rounded-xl border border-slate-200 p-1 w-fit">
+          <button
+            onClick={() => setView('generate')}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${
+              view === 'generate' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+            }`}
+          >
+            <FilePlus2 className="w-4 h-4" />
+            Generate
+          </button>
+          <button
+            onClick={() => setView('archive')}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${
+              view === 'archive' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+            }`}
+          >
+            <Archive className="w-4 h-4" />
+            Archive
+          </button>
+        </div>
+
+        {view === 'archive' && <AdminReports />}
+
+        {view === 'generate' && (
+        <>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <div className="lg:col-span-2">
             <div
@@ -405,6 +432,8 @@ function ReportApp() {
             </div>
             <p className="text-slate-500 text-lg">Upload a booking list CSV to get started</p>
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

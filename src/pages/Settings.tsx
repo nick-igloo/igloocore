@@ -13,11 +13,8 @@ import {
   AlertCircle,
   ExternalLink,
   Search,
-  LayoutDashboard,
   Shield,
-  FileText,
   PackagePlus,
-  ClipboardList,
 } from 'lucide-react';
 import {
   getProperties,
@@ -30,22 +27,16 @@ import {
 } from '../lib/properties';
 import { OwnerManagement } from '../components/OwnerManagement';
 import BankSettingsModal from '../components/BankSettingsModal';
-import { AdminDashboard } from '../components/AdminDashboard';
-import { AdminReports } from '../components/AdminReports';
 import { DirectorAccess } from '../components/DirectorAccess';
-import { ContractorsPanel } from '../components/ContractorsPanel';
 import OnboardingPage from './OnboardingPage';
 
 type TabKey =
-  | 'dashboard'
   | 'properties'
   | 'owners'
   | 'cleaners'
   | 'bank'
   | 'pricing'
-  | 'guest_ready'
   | 'access'
-  | 'reports'
   | 'setup';
 
 interface Tab {
@@ -56,22 +47,30 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
-  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, blurb: 'Org stats and health' },
   { key: 'properties', label: 'Properties', icon: Home, blurb: 'Names, cleaners, prices, welcome packs, rules' },
   { key: 'owners', label: 'Owners', icon: Users, blurb: 'Owner accounts, approvals, portal access' },
   { key: 'cleaners', label: 'Cleaners', icon: Sparkles, blurb: 'Cleaner profiles and property assignments' },
   { key: 'bank', label: 'Bank & Mapping', icon: Landmark, blurb: 'Owner bank details and property mapping' },
   { key: 'pricing', label: 'Pricing', icon: BadgePoundSterling, blurb: 'Welcome pack prices and settlement defaults' },
-  { key: 'guest_ready', label: 'Guest Ready', icon: ClipboardList, blurb: 'Per-property owner tasks (readings, oil, faults)' },
   { key: 'access', label: 'User Access', icon: Shield, blurb: 'Director accounts and project permissions' },
-  { key: 'reports', label: 'Reports', icon: FileText, blurb: 'Generated owner reports archive' },
   { key: 'setup', label: 'Setup', icon: PackagePlus, blurb: 'Initial onboarding and data imports' },
+];
+
+interface TabGroup {
+  label: string;
+  keys: TabKey[];
+}
+
+const TAB_GROUPS: TabGroup[] = [
+  { label: 'Portfolio', keys: ['properties', 'owners', 'cleaners'] },
+  { label: 'Money', keys: ['bank', 'pricing'] },
+  { label: 'System', keys: ['access', 'setup'] },
 ];
 
 export default function Settings() {
   const [tab, setTab] = useState<TabKey>(() => {
     const hash = window.location.hash.replace('#', '');
-    return TABS.some(t => t.key === hash) ? (hash as TabKey) : 'dashboard';
+    return TABS.some(t => t.key === hash) ? (hash as TabKey) : 'properties';
   });
 
   useEffect(() => {
@@ -97,43 +96,49 @@ export default function Settings() {
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-3 overflow-x-auto">
-          <nav className="flex gap-1">
-            {TABS.map(t => {
-              const Icon = t.icon;
-              const active = t.key === tab;
-              return (
-                <button
-                  key={t.key}
-                  onClick={() => setTab(t.key)}
-                  className={`flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-md whitespace-nowrap transition-colors ${
-                    active
-                      ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200'
-                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {t.label}
-                </button>
-              );
-            })}
+          <nav className="flex items-end gap-4">
+            {TAB_GROUPS.map((group, i) => (
+              <div key={group.label} className="flex items-end gap-3">
+                {i > 0 && <div className="w-px h-8 bg-slate-200 mb-1" />}
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 px-1">
+                    {group.label}
+                  </div>
+                  <div className="flex gap-1">
+                    {group.keys.map(key => {
+                      const t = TABS.find(tb => tb.key === key)!;
+                      const Icon = t.icon;
+                      const active = t.key === tab;
+                      return (
+                        <button
+                          key={t.key}
+                          onClick={() => setTab(t.key)}
+                          className={`flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-md whitespace-nowrap transition-colors ${
+                            active
+                              ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200'
+                              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                          }`}
+                        >
+                          <Icon className="w-4 h-4" />
+                          {t.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ))}
           </nav>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {tab === 'dashboard' && <AdminDashboard />}
         {tab === 'properties' && <PropertiesTab />}
         {tab === 'owners' && <OwnerManagement />}
         {tab === 'cleaners' && <CleanersTab />}
         {tab === 'bank' && <BankTab />}
         {tab === 'pricing' && <PricingTab />}
-        {tab === 'guest_ready' && (
-          <div className="space-y-6">
-            <ContractorsPanel />
-          </div>
-        )}
         {tab === 'access' && <DirectorAccess />}
-        {tab === 'reports' && <AdminReports />}
         {tab === 'setup' && <OnboardingPage />}
       </main>
     </div>
