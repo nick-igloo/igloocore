@@ -50,6 +50,7 @@ const NAV = [
     group: 'Labs',
     items: [
       { to: '/labs/property-publisher', label: 'Property Publisher', icon: FlaskConical },
+      { to: '/labs/review-responder', label: 'Review Responder', icon: FlaskConical },
     ],
   },
 ];

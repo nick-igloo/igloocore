@@ -22,6 +22,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const DirectorExpenses = lazy(() => import('./pages/DirectorExpenses'));
 const NewPropertyWizard = lazy(() => import('./pages/NewPropertyWizard'));
 const PropertyPublisher = lazy(() => import('./pages/labs/PropertyPublisher'));
+const ReviewResponder = lazy(() => import('./pages/labs/ReviewResponder'));
 const DriveSync = lazy(() => import('./pages/DriveSync'));
 const WoodlandSafety = lazy(() => import('./pages/WoodlandSafety'));
 
@@ -138,6 +139,7 @@ function App() {
                 <Route path="/onboard-property" element={<NewPropertyWizard />} />
                 <Route path="/drive-sync" element={<DriveSync />} />
                 <Route path="/labs/property-publisher" element={<PropertyPublisher />} />
+                <Route path="/labs/review-responder" element={<ReviewResponder />} />
               </Route>
             </Route>
             {/* Woodland Safety stays login-free: the owner records checks via a
@@ -207,6 +209,7 @@ function App() {
               <Route path="/onboard-property" element={<NewPropertyWizard />} />
               <Route path="/drive-sync" element={<DriveSync />} />
               <Route path="/labs/property-publisher" element={<PropertyPublisher />} />
+                <Route path="/labs/review-responder" element={<ReviewResponder />} />
             </Route>
           </Route>
           {/* Woodland Safety stays login-free (owner link; anon RLS scoped) */}

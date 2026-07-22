@@ -1,0 +1,231 @@
+{
+  "name": "Labs · Review Responder",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "review-responder",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://hq.igloo.scot"
+        }
+      },
+      "id": "webhook-in",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "list_reviews",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "list_reviews"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "draft_reply",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "draft_reply"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "send_reply",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "send_reply"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-action",
+      "name": "Route by action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://api.avantio.pro/pms/v2/reviews",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "pagination_size", "value": "50" },
+            { "name": "sort", "value": "-id" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "accept", "value": "application/json" }]
+        },
+        "options": {}
+      },
+      "id": "avantio-list-reviews",
+      "name": "Avantio: list reviews",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, -160],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_AVANTIO_TEST_CRED",
+          "name": "Avantio X-Avantio-Auth (TEST)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "respond-list",
+      "name": "Respond (reviews)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [700, -160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'claude-sonnet-4-6',\n  max_tokens: 800,\n  messages: [{\n    role: 'user',\n    content: 'You write replies to guest reviews for Igloo, a short-term rental management company in the Cairngorms, Scotland. Voice: warm, genuine, plain UK English, no corporate filler, no exclamation-mark overload. Thank the guest by name if known, pick up one or two specifics from their review, address any criticism honestly and without being defensive, and close warmly (sign off as \"The Igloo Team\"). Keep it under 150 words. Respond with ONLY the reply text, no preamble, no quotes.\\n\\nReview JSON:\\n' + JSON.stringify($json.body.review)\n  }]\n}) }}",
+        "options": {}
+      },
+      "id": "claude-draft",
+      "name": "Claude: draft reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_ANTHROPIC_HEADER_CRED",
+          "name": "Anthropic x-api-key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = ($json.content || []).filter(b => b.type === 'text').map(b => b.text).join('\\n').trim();\nif (!text) throw new Error('Claude returned no text');\nreturn [{ json: { reply: text } }];"
+      },
+      "id": "extract-draft",
+      "name": "Extract draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "respond-draft",
+      "name": "Respond (draft)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [940, 0]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.avantio.pro/pms/v2/reviews/{{ $json.body.reviewId }}/response",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "accept", "value": "application/json" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  response: String($json.body.response).slice(0, 4000),\n  responseDate: new Date().toISOString()\n}) }}",
+        "options": {}
+      },
+      "id": "avantio-send-response",
+      "name": "Avantio: send review response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 160],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_AVANTIO_TEST_CRED",
+          "name": "Avantio X-Avantio-Auth (TEST)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "respond-send",
+      "name": "Respond (sent)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [700, 160]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Route by action", "type": "main", "index": 0 }]] },
+    "Route by action": {
+      "main": [
+        [{ "node": "Avantio: list reviews", "type": "main", "index": 0 }],
+        [{ "node": "Claude: draft reply", "type": "main", "index": 0 }],
+        [{ "node": "Avantio: send review response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Avantio: list reviews": { "main": [[{ "node": "Respond (reviews)", "type": "main", "index": 0 }]] },
+    "Claude: draft reply": { "main": [[{ "node": "Extract draft", "type": "main", "index": 0 }]] },
+    "Extract draft": { "main": [[{ "node": "Respond (draft)", "type": "main", "index": 0 }]] },
+    "Avantio: send review response": { "main": [[{ "node": "Respond (sent)", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
