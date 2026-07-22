@@ -258,6 +258,7 @@ export default function DirectorStats() {
         monthly: stats.performanceTable.map(m => ({ month: m.month, bookings: m.count, value: Math.round(m.bookingValue), commission: Math.round(m.ourCommission), nights: m.nights, occ: +m.occupancy.toFixed(1), pace: +m.pacingOcc.toFixed(1), lastFinal: +m.finalOccLast.toFixed(1), status: m.pacingStatus })),
         portfolio: stats.portfolio,
         recentBookings: stats.recentBookings,
+        upcomingBookings: stats.upcomingBookings,
         properties: stats.propertyStats.map(p => ({ name: p.name, revenue: Math.round(p.revenue), commission: Math.round(p.commission), bookings: p.bookings, nights: p.nights, lastYear: { revenue: Math.round(p.revenueLast), bookings: p.bookingsLast, nights: p.nightsLast } })),
   });
 

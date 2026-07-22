@@ -22,6 +22,7 @@ export interface RecentBooking {
   property: string; created: string; checkin: string | null;
   leadDays: number | null; nights: number; value: number;
 }
+export interface UpcomingBooking { property: string; checkin: string; nights: number; }
 export interface DirectorStats {
   targetYear: number; compYear: number;
   pulse24h: PulseStat; pulse7d: PulseStat; pulse30d: PulseStat;
@@ -31,6 +32,7 @@ export interface DirectorStats {
   performanceTable: PerformanceRow[];
   propertyStats: PropertyStat[];
   recentBookings: RecentBooking[];
+  upcomingBookings: UpcomingBooking[];
   totalNights: number; totalNightsLast: number;
   portfolio: {
     activeThisYear: number; activeLastYear: number; newThisYear: number;
@@ -80,6 +82,7 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
   const pulse7d = { count: 0, val: 0, comm: 0 };
   const pulse30d = { count: 0, val: 0, comm: 0 };
   const recentBookings: RecentBooking[] = [];
+  const upcomingBookings: UpcomingBooking[] = [];
 
   for (const row of rows) {
     const id = String(row['Booking number'] ?? '');
@@ -104,6 +107,16 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
           value: toNum(row['Booking total with tax']),
         });
       }
+    }
+
+    // Forward calendar feed: every confirmed stay from a week ago onward
+    // (any year) — enables gap/open-week analysis per property.
+    if (checkIn && (checkIn.getTime() - now.getTime()) / 86400000 >= -7) {
+      upcomingBookings.push({
+        property: pid,
+        checkin: checkIn.toISOString().slice(0, 10),
+        nights: toNum(row['nights'] ?? row['Nights']),
+      });
     }
 
     // Report window: this is a departures-based revenue report. Only
@@ -261,6 +274,7 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
     performanceTable,
     propertyStats,
     recentBookings: recentBookings.sort((a, b) => b.created.localeCompare(a.created)).slice(0, 120),
+    upcomingBookings: upcomingBookings.sort((a, b) => a.checkin.localeCompare(b.checkin)).slice(0, 600),
     totalNights: statsCurrentYear.reduce((a, m) => a + m.soldNights, 0),
     totalNightsLast: statsLastYearFinal.reduce((a, m) => a + m.soldNights, 0),
     portfolio,
