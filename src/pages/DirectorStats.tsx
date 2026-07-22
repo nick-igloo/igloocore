@@ -236,7 +236,8 @@ export default function DirectorStats() {
         totals: { bookingValue: Math.round(stats.totalRevenue), commission: Math.round(stats.totalCommission), ownerValue: Math.round(stats.totalOwnerValue), ownerValueLastYear: Math.round(stats.totalOwnerValueLast) },
         pulse: { last24h: stats.pulse24h, last7d: stats.pulse7d, last30d: stats.pulse30d },
         monthly: stats.performanceTable.map(m => ({ month: m.month, bookings: m.count, value: Math.round(m.bookingValue), commission: Math.round(m.ourCommission), occ: +m.occupancy.toFixed(1), pace: +m.pacingOcc.toFixed(1), lastFinal: +m.finalOccLast.toFixed(1), status: m.pacingStatus })),
-        properties: stats.propertyStats.map(p => ({ name: p.name, revenue: Math.round(p.revenue), commission: Math.round(p.commission), bookings: p.bookings, nights: p.nights })),
+        portfolio: stats.portfolio,
+        properties: stats.propertyStats.map(p => ({ name: p.name, revenue: Math.round(p.revenue), commission: Math.round(p.commission), bookings: p.bookings, nights: p.nights, lastYear: { revenue: Math.round(p.revenueLast), bookings: p.bookingsLast, nights: p.nightsLast } })),
       };
       const { data, error } = await supabase.functions.invoke('stats-insights', { body: payload });
       if (error) throw error;

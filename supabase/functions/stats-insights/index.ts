@@ -19,6 +19,10 @@ Deno.serve(async (req) => {
 
 Write a sharp internal read for the two directors. British English, plain and direct, no fluff, no restating the obvious numbers back — interpret them. Look for: pacing anomalies (months materially ahead/behind), momentum shifts in the pulse, standout and lagging properties relative to the portfolio, seasonal risks (soft months approaching), and where attention or pricing action would pay.
 
+CRITICAL reasoning rules:
+1. The portfolio has GROWN year on year (see the portfolio object: active counts, newThisYear). Portfolio-level occupancy percentages are DILUTED by newly onboarded properties still ramping up — never conclude performance declined from a lower blended occupancy % alone. Use the same-store figures (sameStoreNights/Revenue vs their Last equivalents — properties active in both years) as the honest like-for-like comparison, and say explicitly when growth dilution explains a headline percentage.
+2. Judge each property against ITS OWN prior year (each property's lastYear object), not only against the portfolio average. A property behind the portfolio average but well up on its own last year is improving; call out properties materially DOWN on their own last year as the real attention list. Ignore last-year comparisons for properties with no prior-year data (new stock) — judge those on ramp-up instead.
+
 Respond ONLY with valid JSON, no markdown fences, in this shape:
 {
   "headline": "one-sentence overall read",

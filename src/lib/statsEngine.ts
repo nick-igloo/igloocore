@@ -15,6 +15,7 @@ export interface PerformanceRow {
 }
 export interface PropertyStat {
   name: string; revenue: number; commission: number; bookings: number; nights: number;
+  revenueLast: number; bookingsLast: number; nightsLast: number;
 }
 export interface DirectorStats {
   targetYear: number; compYear: number;
@@ -24,6 +25,11 @@ export interface DirectorStats {
   totalOwnerValue: number; totalOwnerValueLast: number;
   performanceTable: PerformanceRow[];
   propertyStats: PropertyStat[];
+  portfolio: {
+    activeThisYear: number; activeLastYear: number; newThisYear: number;
+    sameStoreCount: number; sameStoreNights: number; sameStoreNightsLast: number;
+    sameStoreRevenue: number; sameStoreRevenueLast: number;
+  };
   bookingsProcessed: number;
 }
 
@@ -101,7 +107,7 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
     }
 
     if (!propertyMap.has(pid)) {
-      propertyMap.set(pid, { name: pid, revenue: 0, commission: 0, bookings: 0, nights: 0 });
+      propertyMap.set(pid, { name: pid, revenue: 0, commission: 0, bookings: 0, nights: 0, revenueLast: 0, bookingsLast: 0, nightsLast: 0 });
     }
     const pStats = propertyMap.get(pid)!;
 
@@ -128,6 +134,8 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
       const m = checkOut.getMonth();
       statsLastYearFinal[m].ownerValue += ownerValue;
       statsLastYearFinal[m].revenue += totalVal;
+      pStats.revenueLast += totalVal;
+      pStats.bookingsLast += 1;
     }
 
     if (checkIn && nights > 0) {
@@ -142,6 +150,7 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
         }
         if (y === compYear) {
           statsLastYearFinal[m].soldNights += 1;
+          pStats.nightsLast += 1;
           if (created && created <= lastYearCutoff) statsLastYearPace[m].soldNights += 1;
         }
       }
@@ -193,8 +202,24 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
   const aggPaceLast = totalCapLast > 0 ? (totalNightsPace / totalCapLast) * 100 : 0;
 
   const propertyStats = Array.from(propertyMap.values())
-    .filter(p => p.revenue > 0)
+    .filter(p => p.revenue > 0 || p.revenueLast > 0)
     .sort((a, b) => b.revenue - a.revenue);
+
+  // Portfolio growth context: same-store = active both years (like-for-like)
+  const allProps = Array.from(propertyMap.values());
+  const activeCur = allProps.filter(p => p.nights > 0 || p.revenue > 0);
+  const activeLast = allProps.filter(p => p.nightsLast > 0 || p.revenueLast > 0);
+  const sameStore = allProps.filter(p => (p.nights > 0 || p.revenue > 0) && (p.nightsLast > 0 || p.revenueLast > 0));
+  const portfolio = {
+    activeThisYear: activeCur.length,
+    activeLastYear: activeLast.length,
+    newThisYear: activeCur.filter(p => !(p.nightsLast > 0 || p.revenueLast > 0)).length,
+    sameStoreCount: sameStore.length,
+    sameStoreNights: sameStore.reduce((a, p) => a + p.nights, 0),
+    sameStoreNightsLast: sameStore.reduce((a, p) => a + p.nightsLast, 0),
+    sameStoreRevenue: sameStore.reduce((a, p) => a + p.revenue, 0),
+    sameStoreRevenueLast: sameStore.reduce((a, p) => a + p.revenueLast, 0),
+  };
 
   const fmtPulse = (p: { count: number; val: number; comm: number }): PulseStat =>
     ({ count: p.count, bookingValue: p.val, ourCommission: p.comm });
@@ -210,6 +235,7 @@ export function computeDirectorStats(rows: Row[], now: Date = new Date()): Direc
     totalOwnerValueLast: performanceTable.reduce((a, m) => a + m.ownerValueLast, 0),
     performanceTable,
     propertyStats,
+    portfolio,
     bookingsProcessed: processedIds.size,
   };
 }
