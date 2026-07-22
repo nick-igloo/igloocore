@@ -1,5 +1,5 @@
 {
-  "name": "Labs · Photo Upload (Property Publisher)",
+  "name": "Labs \u00b7 Photo Upload (Property Publisher)",
   "nodes": [
     {
       "parameters": {
@@ -14,7 +14,10 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,12 +25,18 @@
           "values": [
             {
               "conditions": {
-                "options": { "caseSensitive": true, "version": 2 },
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2
+                },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.body.action }}",
                     "rightValue": "tag_images",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -37,12 +46,18 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": true, "version": 2 },
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2
+                },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.body.action }}",
                     "rightValue": "publish",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -58,7 +73,10 @@
       "name": "Route by action",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -69,8 +87,14 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "anthropic-version", "value": "2023-06-01" },
-            { "name": "content-type", "value": "application/json" }
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -82,7 +106,10 @@
       "name": "Claude vision tag",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [460, -120],
+      "position": [
+        460,
+        -120
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "REPLACE_WITH_ANTHROPIC_HEADER_CRED",
@@ -98,7 +125,10 @@
       "name": "Pair results to ids",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, -120]
+      "position": [
+        700,
+        -120
+      ]
     },
     {
       "parameters": {
@@ -109,8 +139,14 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "accept", "value": "application/json" },
-            { "name": "content-type", "value": "application/json" }
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -122,7 +158,10 @@
       "name": "Avantio: create accommodation",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [460, 140],
+      "position": [
+        460,
+        140
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "REPLACE_WITH_AVANTIO_TEST_CRED",
@@ -133,14 +172,20 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://api.avantio.pro/pms/v2/accommodations/{{ $json.id }}/gallery",
+        "url": "=https://api.avantio.pro/pms/v2/accommodations/{{ $json.data.id }}/gallery",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "accept", "value": "application/json" },
-            { "name": "content-type", "value": "application/json" }
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -152,7 +197,10 @@
       "name": "Avantio: create gallery",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [700, 140],
+      "position": [
+        700,
+        140
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "REPLACE_WITH_AVANTIO_TEST_CRED",
@@ -162,13 +210,16 @@
     },
     {
       "parameters": {
-        "jsCode": "// Fan out: one item per image, carrying accommodation + gallery ids.\nconst req = $('Webhook').first().json.body;\nconst accommodationId = $('Avantio: create accommodation').first().json.id;\nconst galleryId = $json.id;\nreturn req.images.map(im => ({ json: { ...im, accommodationId, galleryId } }));"
+        "jsCode": "// Fan out: one item per image, carrying accommodation + gallery ids.\n// Avantio wraps responses in a data envelope.\nconst req = $('Webhook').first().json.body;\nconst accommodationId = $('Avantio: create accommodation').first().json.data.id;\nconst galleryId = $json.data?.id ?? $json.id;\nreturn req.images.map(im => ({ json: { ...im, accommodationId, galleryId } }));"
       },
       "id": "fan-out-images",
       "name": "One item per image",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [940, 140]
+      "position": [
+        940,
+        140
+      ]
     },
     {
       "parameters": {
@@ -179,8 +230,14 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "accept", "value": "application/json" },
-            { "name": "content-type", "value": "application/json" }
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -192,7 +249,10 @@
       "name": "Avantio: upload image (URL pull)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1180, 140],
+      "position": [
+        1180,
+        140
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "REPLACE_WITH_AVANTIO_TEST_CRED",
@@ -204,16 +264,28 @@
       "parameters": {
         "resource": "folder",
         "operation": "create",
-        "name": "=Labs · {{ $('Webhook').first().json.body.property.name }}",
-        "driveId": { "__rl": true, "mode": "list", "value": "My Drive" },
-        "folderId": { "__rl": true, "mode": "list", "value": "root", "cachedResultName": "/ (Root folder)" },
+        "name": "=Labs \u00b7 {{ $('Webhook').first().json.body.property.name }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "root",
+          "cachedResultName": "/ (Root folder)"
+        },
         "options": {}
       },
       "id": "drive-folder",
       "name": "Drive: create property folder",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
-      "position": [1420, 140],
+      "position": [
+        1420,
+        140
+      ],
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "REPLACE_WITH_GDRIVE_CRED",
@@ -229,32 +301,55 @@
       "name": "One item per image (Drive)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1660, 140]
+      "position": [
+        1660,
+        140
+      ]
     },
     {
       "parameters": {
         "method": "GET",
         "url": "={{ $json.url }}",
-        "options": { "response": { "response": { "responseFormat": "file" } } }
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
       },
       "id": "fetch-image",
       "name": "Fetch image bytes",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1900, 140]
+      "position": [
+        1900,
+        140
+      ]
     },
     {
       "parameters": {
         "name": "={{ $json.name }}",
-        "driveId": { "__rl": true, "mode": "list", "value": "My Drive" },
-        "folderId": { "__rl": true, "mode": "id", "value": "={{ $json.folderId }}" },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.folderId }}"
+        },
         "options": {}
       },
       "id": "drive-upload",
       "name": "Drive: upload photo",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
-      "position": [2140, 140],
+      "position": [
+        2140,
+        140
+      ],
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "REPLACE_WITH_GDRIVE_CRED",
@@ -264,13 +359,16 @@
     },
     {
       "parameters": {
-        "jsCode": "// Collapse to a single response payload + write status back to Supabase\n// (Supabase node below). driveFolderUrl comes from the fan-out items.\nconst accommodationId = $('Avantio: create accommodation').first().json.id;\nconst galleryId = $('Avantio: create gallery').first().json.id;\nconst driveFolderUrl = $('One item per image (Drive)').first().json.folderUrl;\nconst draftId = $('Webhook').first().json.body.draftId;\nreturn [{ json: { draftId, accommodationId, galleryId, driveFolderUrl } }];"
+        "jsCode": "// Collapse to a single response payload (Avantio wraps responses in data).\nconst acc = $('Avantio: create accommodation').first().json;\nconst gal = $('Avantio: create gallery').first().json;\nconst accommodationId = acc.data?.id ?? acc.id;\nconst galleryId = gal.data?.id ?? gal.id;\nconst driveFolderUrl = $('One item per image (Drive)').first().json.folderUrl;\nconst draftId = $('Webhook').first().json.body.draftId;\nreturn [{ json: { draftId, accommodationId, galleryId, driveFolderUrl } }];"
       },
       "id": "collect-publish-result",
       "name": "Collect publish result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2380, 140]
+      "position": [
+        2380,
+        140
+      ]
     },
     {
       "parameters": {
@@ -278,15 +376,31 @@
         "tableId": "labs_property_drafts",
         "filters": {
           "conditions": [
-            { "keyName": "id", "condition": "eq", "keyValue": "={{ $json.draftId }}" }
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.draftId }}"
+            }
           ]
         },
         "fieldsUi": {
           "fieldValues": [
-            { "fieldId": "status", "fieldValue": "published" },
-            { "fieldId": "avantio_accommodation_id", "fieldValue": "={{ $json.accommodationId }}" },
-            { "fieldId": "avantio_gallery_id", "fieldValue": "={{ $json.galleryId }}" },
-            { "fieldId": "drive_folder_url", "fieldValue": "={{ $json.driveFolderUrl }}" }
+            {
+              "fieldId": "status",
+              "fieldValue": "published"
+            },
+            {
+              "fieldId": "avantio_accommodation_id",
+              "fieldValue": "={{ $json.accommodationId }}"
+            },
+            {
+              "fieldId": "avantio_gallery_id",
+              "fieldValue": "={{ $json.galleryId }}"
+            },
+            {
+              "fieldId": "drive_folder_url",
+              "fieldValue": "={{ $json.driveFolderUrl }}"
+            }
           ]
         }
       },
@@ -294,7 +408,10 @@
       "name": "Supabase: mark published",
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
-      "position": [2620, 140],
+      "position": [
+        2620,
+        140
+      ],
       "credentials": {
         "supabaseApi": {
           "id": "REPLACE_WITH_SUPABASE_CRED",
@@ -312,7 +429,10 @@
       "name": "Respond (publish)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [2860, 140]
+      "position": [
+        2860,
+        140
+      ]
     },
     {
       "parameters": {
@@ -324,30 +444,177 @@
       "name": "Respond (tag results)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [940, -120]
+      "position": [
+        940,
+        -120
+      ]
     }
   ],
   "connections": {
-    "Webhook": { "main": [[{ "node": "Route by action", "type": "main", "index": 0 }]] },
-    "Route by action": {
+    "Webhook": {
       "main": [
-        [{ "node": "Claude vision tag", "type": "main", "index": 0 }],
-        [{ "node": "Avantio: create accommodation", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Route by action",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Claude vision tag": { "main": [[{ "node": "Pair results to ids", "type": "main", "index": 0 }]] },
-    "Pair results to ids": { "main": [[{ "node": "Respond (tag results)", "type": "main", "index": 0 }]] },
-    "Avantio: create accommodation": { "main": [[{ "node": "Avantio: create gallery", "type": "main", "index": 0 }]] },
-    "Avantio: create gallery": { "main": [[{ "node": "One item per image", "type": "main", "index": 0 }]] },
-    "One item per image": { "main": [[{ "node": "Avantio: upload image (URL pull)", "type": "main", "index": 0 }]] },
-    "Avantio: upload image (URL pull)": { "main": [[{ "node": "Drive: create property folder", "type": "main", "index": 0 }]] },
-    "Drive: create property folder": { "main": [[{ "node": "One item per image (Drive)", "type": "main", "index": 0 }]] },
-    "One item per image (Drive)": { "main": [[{ "node": "Fetch image bytes", "type": "main", "index": 0 }]] },
-    "Fetch image bytes": { "main": [[{ "node": "Drive: upload photo", "type": "main", "index": 0 }]] },
-    "Drive: upload photo": { "main": [[{ "node": "Collect publish result", "type": "main", "index": 0 }]] },
-    "Collect publish result": { "main": [[{ "node": "Supabase: mark published", "type": "main", "index": 0 }]] },
-    "Supabase: mark published": { "main": [[{ "node": "Respond (publish)", "type": "main", "index": 0 }]] }
+    "Route by action": {
+      "main": [
+        [
+          {
+            "node": "Claude vision tag",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Avantio: create accommodation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude vision tag": {
+      "main": [
+        [
+          {
+            "node": "Pair results to ids",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pair results to ids": {
+      "main": [
+        [
+          {
+            "node": "Respond (tag results)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avantio: create accommodation": {
+      "main": [
+        [
+          {
+            "node": "Avantio: create gallery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avantio: create gallery": {
+      "main": [
+        [
+          {
+            "node": "One item per image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per image": {
+      "main": [
+        [
+          {
+            "node": "Avantio: upload image (URL pull)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avantio: upload image (URL pull)": {
+      "main": [
+        [
+          {
+            "node": "Drive: create property folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: create property folder": {
+      "main": [
+        [
+          {
+            "node": "One item per image (Drive)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per image (Drive)": {
+      "main": [
+        [
+          {
+            "node": "Fetch image bytes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch image bytes": {
+      "main": [
+        [
+          {
+            "node": "Drive: upload photo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: upload photo": {
+      "main": [
+        [
+          {
+            "node": "Collect publish result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect publish result": {
+      "main": [
+        [
+          {
+            "node": "Supabase: mark published",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: mark published": {
+      "main": [
+        [
+          {
+            "node": "Respond (publish)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "pinData": {}
 }
