@@ -277,7 +277,7 @@
     },
     {
       "parameters": {
-        "name": "={{ $json.name }}",
+        "name": "={{ $('One item per image (Drive)').item.json.name }}",
         "driveId": {
           "__rl": true,
           "mode": "list",
@@ -286,7 +286,7 @@
         "folderId": {
           "__rl": true,
           "mode": "id",
-          "value": "={{ $json.folderId }}"
+          "value": "={{ $('One item per image (Drive)').item.json.folderId }}"
         },
         "options": {}
       },
