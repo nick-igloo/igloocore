@@ -6,7 +6,9 @@
         "httpMethod": "POST",
         "path": "photo-upload",
         "responseMode": "responseNode",
-        "options": {}
+        "options": {
+          "allowedOrigins": "https://hq.igloo.scot"
+        }
       },
       "id": "webhook-in",
       "name": "Webhook",
