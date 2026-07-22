@@ -53,6 +53,7 @@ const NAV = [
       { to: '/labs/review-responder', label: 'Review Responder', icon: FlaskConical },
       { to: '/labs/gap-finder', label: 'Gap Finder', icon: FlaskConical },
       { to: '/labs/booking-calendar', label: 'Booking Planner', icon: FlaskConical },
+      { to: '/labs/cleaner-calendar', label: 'Cleaner Calendar', icon: FlaskConical },
     ],
   },
 ];

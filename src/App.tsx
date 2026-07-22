@@ -25,6 +25,7 @@ const PropertyPublisher = lazy(() => import('./pages/labs/PropertyPublisher'));
 const ReviewResponder = lazy(() => import('./pages/labs/ReviewResponder'));
 const GapFinder = lazy(() => import('./pages/labs/GapFinder'));
 const BookingCalendar = lazy(() => import('./pages/labs/BookingCalendar'));
+const CleanerCalendar = lazy(() => import('./pages/labs/CleanerCalendar'));
 const DriveSync = lazy(() => import('./pages/DriveSync'));
 const WoodlandSafety = lazy(() => import('./pages/WoodlandSafety'));
 
@@ -144,6 +145,7 @@ function App() {
                 <Route path="/labs/review-responder" element={<ReviewResponder />} />
                 <Route path="/labs/gap-finder" element={<GapFinder />} />
                 <Route path="/labs/booking-calendar" element={<BookingCalendar />} />
+                <Route path="/labs/cleaner-calendar" element={<CleanerCalendar />} />
               </Route>
             </Route>
             {/* Woodland Safety stays login-free: the owner records checks via a
@@ -216,6 +218,7 @@ function App() {
                 <Route path="/labs/review-responder" element={<ReviewResponder />} />
                 <Route path="/labs/gap-finder" element={<GapFinder />} />
                 <Route path="/labs/booking-calendar" element={<BookingCalendar />} />
+                <Route path="/labs/cleaner-calendar" element={<CleanerCalendar />} />
             </Route>
           </Route>
           {/* Woodland Safety stays login-free (owner link; anon RLS scoped) */}
