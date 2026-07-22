@@ -1,5 +1,5 @@
 {
-  "name": "Labs · Gap Finder",
+  "name": "Labs \u00b7 Gap Finder",
   "nodes": [
     {
       "parameters": {
@@ -14,7 +14,10 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -23,11 +26,21 @@
         "genericAuthType": "httpHeaderAuth",
         "sendQuery": true,
         "queryParameters": {
-          "parameters": [{ "name": "pagination_size", "value": "20" }]
+          "parameters": [
+            {
+              "name": "pagination_size",
+              "value": "20"
+            }
+          ]
         },
         "sendHeaders": true,
         "headerParameters": {
-          "parameters": [{ "name": "accept", "value": "application/json" }]
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
         },
         "options": {}
       },
@@ -35,7 +48,10 @@
       "name": "Avantio: list accommodations",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [220, 0],
+      "position": [
+        220,
+        0
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "REPLACE_WITH_AVANTIO_TEST_CRED",
@@ -51,7 +67,10 @@
       "name": "One per accommodation",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -60,15 +79,29 @@
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
-          "parameters": [{ "name": "accept", "value": "application/json" }]
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
         },
-        "options": { "response": { "response": { "neverError": true } } }
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       },
       "id": "get-availabilities",
       "name": "Avantio: get availabilities",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, 0],
+      "position": [
+        660,
+        0
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "REPLACE_WITH_AVANTIO_TEST_CRED",
@@ -84,7 +117,10 @@
       "name": "Aggregate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 0]
+      "position": [
+        880,
+        0
+      ]
     },
     {
       "parameters": {
@@ -96,16 +132,237 @@
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1100, 0]
+      "position": [
+        1100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "scan",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "scan"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "draft_offer",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "draft_offer"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-action",
+      "name": "Route by action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        180,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'claude-sonnet-4-6',\n  max_tokens: 600,\n  messages: [{\n    role: 'user',\n    content: 'You write promotional copy for Igloo, a short-term rental management company in the Cairngorms, Scotland. A property has an unbooked gap to fill. Write three pieces in warm, plain UK English (no hyperbole, no exclamation-mark overload): 1) an ad headline under 12 words, 2) a social post under 60 words with the dates, 3) a two-sentence email snippet for past guests. Mention the property name and dates naturally. Respond ONLY with JSON: {\"headline\": \"...\", \"social\": \"...\", \"email\": \"...\"}. No markdown fences.\\n\\nGap: ' + JSON.stringify($json.body.gap)\n  }]\n}) }}",
+        "options": {}
+      },
+      "id": "claude-offer",
+      "name": "Claude: draft offer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        420,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_ANTHROPIC_HEADER_CRED",
+          "name": "Anthropic x-api-key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = ($json.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();\nconst clean = raw.replace(/```json|```/g, '').trim();\nlet parsed;\ntry { parsed = JSON.parse(clean); } catch (e) { throw new Error('Claude did not return valid JSON: ' + clean.slice(0, 200)); }\nreturn [{ json: parsed }];"
+      },
+      "id": "extract-offer",
+      "name": "Extract offer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "respond-offer",
+      "name": "Respond (offer)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        900,
+        200
+      ]
     }
   ],
   "connections": {
-    "Webhook": { "main": [[{ "node": "Avantio: list accommodations", "type": "main", "index": 0 }]] },
-    "Avantio: list accommodations": { "main": [[{ "node": "One per accommodation", "type": "main", "index": 0 }]] },
-    "One per accommodation": { "main": [[{ "node": "Avantio: get availabilities", "type": "main", "index": 0 }]] },
-    "Avantio: get availabilities": { "main": [[{ "node": "Aggregate", "type": "main", "index": 0 }]] },
-    "Aggregate": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Route by action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avantio: list accommodations": {
+      "main": [
+        [
+          {
+            "node": "One per accommodation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One per accommodation": {
+      "main": [
+        [
+          {
+            "node": "Avantio: get availabilities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avantio: get availabilities": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by action": {
+      "main": [
+        [
+          {
+            "node": "Avantio: list accommodations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Claude: draft offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude: draft offer": {
+      "main": [
+        [
+          {
+            "node": "Extract offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract offer": {
+      "main": [
+        [
+          {
+            "node": "Respond (offer)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "pinData": {}
 }

@@ -1,25 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Loader2, RefreshCw, AlertCircle, X, FlaskConical, CalendarRange, Moon,
+  Sparkles, Copy, Check, Download,
 } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════════
 // LABS · Gap Finder
-// Demo: scan every accommodation's availability calendar (Avantio
-// GET /accommodations/{id}/availabilities via n8n) and surface the
-// bookable gaps — orphan nights and short windows — over the next
-// six months. Read-only; groundwork for gap-driven ad campaigns and
-// orphan-night offers.
+// Scan availability calendars, surface orphan nights and short gaps,
+// then act on them: Claude drafts offer copy (ad headline, social
+// post, email snippet) per gap, and gaps export to CSV for campaigns.
 // ═══════════════════════════════════════════════════════════════════
 
 const WEBHOOK_URL =
   import.meta.env.VITE_N8N_GAPFINDER_WEBHOOK_URL ||
   'https://igloo.app.n8n.cloud/webhook/gap-finder';
 
-const WINDOW_DAYS = 183; // ~6 months
+const DAY = 86_400_000;
 
-// Availability season shape isn't expanded in the API reference —
-// normalise defensively across likely field names.
 interface RawSeason {
   from?: string; to?: string;
   startDate?: string; endDate?: string;
@@ -32,26 +29,21 @@ interface RawSeason {
 interface PropertyScan {
   id: string;
   name: string;
-  seasons?: RawSeason[];
-  availabilities?: RawSeason[] | { seasons?: RawSeason[] };
   data?: RawSeason[] | { seasons?: RawSeason[] };
   error?: string;
   [key: string]: unknown;
 }
 
 interface Season { from: Date; to: Date; available: boolean }
-interface Gap { from: Date; to: Date; nights: number; kind: 'orphan' | 'short' | 'long' }
+interface Gap { propertyId: string; propertyName: string; from: Date; to: Date; nights: number; kind: 'orphan' | 'short' | 'long' }
 interface PropertyVM { id: string; name: string; seasons: Season[]; gaps: Gap[]; error?: string }
 
-const DAY = 86_400_000;
+interface OfferCopy { headline: string; social: string; email: string }
+
 const clampDate = (d: Date, min: Date, max: Date) => new Date(Math.min(Math.max(d.getTime(), min.getTime()), max.getTime()));
 
 function extractSeasons(p: PropertyScan): RawSeason[] {
-  const candidates: unknown[] = [
-    p.seasons, p.availabilities, p.data,
-    (p.availabilities as { seasons?: RawSeason[] } | undefined)?.seasons,
-    (p.data as { seasons?: RawSeason[] } | undefined)?.seasons,
-  ];
+  const candidates: unknown[] = [p.data, (p.data as { seasons?: RawSeason[] } | undefined)?.seasons];
   for (const c of candidates) if (Array.isArray(c) && c.length) return c as RawSeason[];
   return [];
 }
@@ -81,7 +73,7 @@ function normalise(p: PropertyScan, windowStart: Date, windowEnd: Date): Propert
     .map(s => {
       const nights = Math.max(0, Math.round((+s.to - +s.from) / DAY));
       const kind: Gap['kind'] = nights <= 3 ? 'orphan' : nights <= 7 ? 'short' : 'long';
-      return { from: s.from, to: s.to, nights, kind };
+      return { propertyId: p.id, propertyName: p.name || p.id, from: s.from, to: s.to, nights, kind };
     })
     .filter(g => g.nights > 0);
 
@@ -89,14 +81,27 @@ function normalise(p: PropertyScan, windowStart: Date, windowEnd: Date): Propert
 }
 
 const fmt = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 export default function GapFinder() {
   const [properties, setProperties] = useState<PropertyVM[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Controls
+  const [windowDays, setWindowDays] = useState(183);
+  const [hideGapless, setHideGapless] = useState(true);
+
+  // Offer drafting
+  const [selectedGap, setSelectedGap] = useState<Gap | null>(null);
+  const [offer, setOffer] = useState<OfferCopy | null>(null);
+  const [offerLoading, setOfferLoading] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+
   const windowStart = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
-  const windowEnd = useMemo(() => new Date(+windowStart + WINDOW_DAYS * DAY), [windowStart]);
+  const windowEnd = useMemo(() => new Date(+windowStart + windowDays * DAY), [windowStart, windowDays]);
+
+  const [rawScan, setRawScan] = useState<PropertyScan[]>([]);
 
   const scan = useCallback(async () => {
     setLoading(true); setError(null);
@@ -108,16 +113,34 @@ export default function GapFinder() {
       });
       if (!res.ok) throw new Error(`Webhook returned ${res.status} — is the n8n workflow active?`);
       const payload = await res.json();
-      const list: PropertyScan[] = payload?.properties ?? (Array.isArray(payload) ? payload : []);
-      setProperties(list.map(p => normalise(p, windowStart, windowEnd)));
+      setRawScan(payload?.properties ?? (Array.isArray(payload) ? payload : []));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Scan failed');
     } finally {
       setLoading(false);
     }
-  }, [windowStart, windowEnd]);
+  }, []);
 
   useEffect(() => { scan(); }, [scan]);
+
+  // Re-normalise locally when window changes — no refetch needed.
+  useEffect(() => {
+    setProperties(rawScan.map(p => normalise(p, windowStart, windowEnd)));
+  }, [rawScan, windowStart, windowEnd]);
+
+  const visible = useMemo(
+    () => {
+      const list = hideGapless
+        ? properties.filter(p => p.gaps.some(g => g.kind !== 'long'))
+        : properties;
+      return [...list].sort((a, b) => {
+        const an = a.gaps.filter(g => g.kind === 'orphan').reduce((n, g) => n + g.nights, 0);
+        const bn = b.gaps.filter(g => g.kind === 'orphan').reduce((n, g) => n + g.nights, 0);
+        return bn - an;
+      });
+    },
+    [properties, hideGapless],
+  );
 
   const totals = useMemo(() => {
     const gaps = properties.flatMap(p => p.gaps);
@@ -125,35 +148,90 @@ export default function GapFinder() {
       orphanNights: gaps.filter(g => g.kind === 'orphan').reduce((n, g) => n + g.nights, 0),
       orphanWindows: gaps.filter(g => g.kind === 'orphan').length,
       shortWindows: gaps.filter(g => g.kind === 'short').length,
-      soon: gaps.filter(g => +g.from - +windowStart < 30 * DAY).length,
+      soon: gaps.filter(g => g.kind !== 'long' && +g.from - +windowStart < 30 * DAY).length,
     };
   }, [properties, windowStart]);
 
-  const pct = (d: Date) => `${(((+d - +windowStart) / (WINDOW_DAYS * DAY)) * 100).toFixed(2)}%`;
-  const widthPct = (a: Date, b: Date) => `${Math.max(0.5, ((+b - +a) / (WINDOW_DAYS * DAY)) * 100).toFixed(2)}%`;
+  const pct = (d: Date) => `${(((+d - +windowStart) / (windowDays * DAY)) * 100).toFixed(2)}%`;
+  const widthPct = (a: Date, b: Date) => `${Math.max(0.5, ((+b - +a) / (windowDays * DAY)) * 100).toFixed(2)}%`;
 
   const monthTicks = useMemo(() => {
     const ticks: { label: string; left: string }[] = [];
     const d = new Date(windowStart.getFullYear(), windowStart.getMonth() + 1, 1);
     while (d < windowEnd) {
-      ticks.push({ label: d.toLocaleDateString('en-GB', { month: 'short' }), left: pct(d) });
+      ticks.push({ label: d.toLocaleDateString('en-GB', { month: 'short' }), left: `${(((+d - +windowStart) / (windowDays * DAY)) * 100).toFixed(2)}%` });
       d.setMonth(d.getMonth() + 1);
     }
     return ticks;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowStart, windowEnd]);
+  }, [windowStart, windowEnd, windowDays]);
+
+  const draftOffer = async (gap: Gap) => {
+    setSelectedGap(gap); setOffer(null); setOfferLoading(true); setError(null);
+    try {
+      const res = await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'draft_offer',
+          gap: {
+            propertyName: gap.propertyName,
+            from: iso(gap.from),
+            to: iso(gap.to),
+            nights: gap.nights,
+            kind: gap.kind,
+          },
+        }),
+      });
+      if (!res.ok) throw new Error(`Draft failed (${res.status})`);
+      const data = await res.json();
+      if (!data.headline && !data.social && !data.email) throw new Error('No offer copy returned');
+      setOffer({ headline: data.headline || '', social: data.social || '', email: data.email || '' });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Offer drafting failed');
+      setSelectedGap(null);
+    } finally {
+      setOfferLoading(false);
+    }
+  };
+
+  const copyText = async (key: string, text: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopied(key);
+    setTimeout(() => setCopied(c => (c === key ? null : c)), 1500);
+  };
+
+  const exportCsv = () => {
+    const rows = [
+      ['property_id', 'property', 'from', 'to', 'nights', 'kind'],
+      ...properties.flatMap(p => p.gaps.filter(g => g.kind !== 'long').map(g =>
+        [g.propertyId, g.propertyName, iso(g.from), iso(g.to), String(g.nights), g.kind],
+      )),
+    ];
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `igloo-gaps-${iso(new Date())}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div className="flex items-center gap-2.5 mb-6">
+      <div className="flex items-center gap-2.5 mb-4 flex-wrap">
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold uppercase tracking-wider">
           <FlaskConical className="w-3.5 h-3.5" /> Labs
         </span>
         <h1 className="text-xl font-bold text-slate-900">Gap Finder</h1>
-        <span className="text-xs text-slate-400 hidden sm:inline">
-          Next 6 months · Avantio test credentials · read-only
-        </span>
+        <span className="text-xs text-slate-400 hidden sm:inline">Avantio test credentials · read-only scan</span>
         <div className="flex-1" />
+        <button
+          onClick={exportCsv}
+          disabled={loading || totals.orphanWindows + totals.shortWindows === 0}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-40"
+        >
+          <Download className="w-3.5 h-3.5" /> Export gaps CSV
+        </button>
         <button
           onClick={scan}
           disabled={loading}
@@ -161,6 +239,26 @@ export default function GapFinder() {
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Rescan
         </button>
+      </div>
+
+      <div className="flex items-center gap-3 mb-5 flex-wrap">
+        <div className="inline-flex rounded-lg bg-white border border-slate-200 p-0.5">
+          {[{ d: 92, l: '3 months' }, { d: 183, l: '6 months' }, { d: 365, l: '12 months' }].map(o => (
+            <button
+              key={o.d}
+              onClick={() => setWindowDays(o.d)}
+              className={`px-3 py-1 text-xs font-semibold rounded-md ${
+                windowDays === o.d ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              {o.l}
+            </button>
+          ))}
+        </div>
+        <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer">
+          <input type="checkbox" checked={hideGapless} onChange={e => setHideGapless(e.target.checked)} className="rounded" />
+          Only properties with gaps
+        </label>
       </div>
 
       {error && (
@@ -187,6 +285,51 @@ export default function GapFinder() {
         </div>
       )}
 
+      {/* Offer panel */}
+      {selectedGap && (
+        <div className="mb-6 bg-white rounded-2xl border border-violet-200 shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="w-4 h-4 text-violet-600" />
+            <span className="text-sm font-bold text-slate-900">
+              Offer for {selectedGap.propertyName} · {selectedGap.nights} nights · {fmt(selectedGap.from)}–{fmt(selectedGap.to)}
+            </span>
+            <div className="flex-1" />
+            <button onClick={() => { setSelectedGap(null); setOffer(null); }} className="text-slate-400 hover:text-slate-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {offerLoading && (
+            <div className="flex items-center gap-2 text-sm text-slate-400 py-4">
+              <Loader2 className="w-4 h-4 animate-spin" /> Drafting offer copy…
+            </div>
+          )}
+          {offer && (
+            <div className="space-y-3">
+              {[
+                { key: 'headline', label: 'Ad headline', text: offer.headline },
+                { key: 'social', label: 'Social post', text: offer.social },
+                { key: 'email', label: 'Email snippet', text: offer.email },
+              ].filter(v => v.text).map(v => (
+                <div key={v.key} className="border border-slate-100 rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{v.label}</span>
+                    <div className="flex-1" />
+                    <button
+                      onClick={() => copyText(v.key, v.text)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800"
+                    >
+                      {copied === v.key ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copied === v.key ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{v.text}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {loading && (
         <div className="text-center py-16 text-slate-400">
           <Loader2 className="w-8 h-8 mx-auto animate-spin mb-3" />
@@ -194,15 +337,19 @@ export default function GapFinder() {
         </div>
       )}
 
-      {!loading && properties.length === 0 && !error && (
+      {!loading && visible.length === 0 && !error && (
         <div className="text-center py-16 text-slate-400">
           <CalendarRange className="w-10 h-10 mx-auto mb-2 opacity-40" />
-          <p className="text-sm">No accommodations returned from the scan.</p>
+          <p className="text-sm">
+            {hideGapless && properties.length > 0
+              ? 'No properties with orphan or short gaps in this window — untick the filter to see everything.'
+              : 'No accommodations returned from the scan.'}
+          </p>
         </div>
       )}
 
       <div className="space-y-3">
-        {properties.map(p => (
+        {visible.map(p => (
           <div key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-sm font-semibold text-slate-900">{p.name}</span>
@@ -225,15 +372,16 @@ export default function GapFinder() {
                 />
               ))}
               {p.gaps.filter(g => g.kind !== 'long').map((g, i) => (
-                <div
+                <button
                   key={`g${i}`}
-                  title={`${g.nights}-night ${g.kind} gap · ${fmt(g.from)} → ${fmt(g.to)}`}
-                  className={`absolute top-0 h-full ${g.kind === 'orphan' ? 'bg-amber-400' : 'bg-blue-300'}`}
+                  onClick={() => draftOffer(g)}
+                  title={`${g.nights}-night ${g.kind} gap · ${fmt(g.from)} → ${fmt(g.to)} — click to draft an offer`}
+                  className={`absolute top-0 h-full cursor-pointer hover:opacity-80 ${g.kind === 'orphan' ? 'bg-amber-400' : 'bg-blue-300'}`}
                   style={{ left: pct(g.from), width: widthPct(g.from, g.to) }}
                 />
               ))}
               {monthTicks.map(t => (
-                <div key={t.label + t.left} className="absolute top-0 h-full border-l border-white/70" style={{ left: t.left }}>
+                <div key={t.label + t.left} className="absolute top-0 h-full border-l border-white/70 pointer-events-none" style={{ left: t.left }}>
                   <span className="absolute top-0.5 left-1 text-[9px] font-semibold text-slate-500/70">{t.label}</span>
                 </div>
               ))}
@@ -242,14 +390,18 @@ export default function GapFinder() {
             {p.gaps.filter(g => g.kind !== 'long').length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {p.gaps.filter(g => g.kind !== 'long').slice(0, 8).map((g, i) => (
-                  <span
+                  <button
                     key={i}
-                    className={`px-2 py-0.5 rounded-md text-[11px] font-semibold ${
-                      g.kind === 'orphan' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'
+                    onClick={() => draftOffer(g)}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition-colors ${
+                      g.kind === 'orphan'
+                        ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                        : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
                     }`}
                   >
+                    <Sparkles className="w-3 h-3 inline mr-1 -mt-0.5" />
                     {g.nights}n · {fmt(g.from)}–{fmt(g.to)}
-                  </span>
+                  </button>
                 ))}
               </div>
             )}
@@ -257,10 +409,10 @@ export default function GapFinder() {
         ))}
       </div>
 
-      {!loading && properties.length > 0 && (
+      {!loading && visible.length > 0 && (
         <p className="mt-4 text-[11px] text-slate-400">
           Green = available · amber = orphan window (≤3 nights) · blue = short window (4–7 nights) · grey = booked/unavailable.
-          Windows over 7 nights are left green — those aren't gaps, they're just availability.
+          Click any gap to draft offer copy for it.
         </p>
       )}
     </div>
